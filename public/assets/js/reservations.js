@@ -262,9 +262,15 @@ async function loadReservations() {
     }
 }
 
-reservationCancelButton.addEventListener("click", cancelReservation);
-reservationDetailClose.addEventListener("click", closeReservationDetail);
-reservationDetailCancel.addEventListener("click", closeReservationDetail);
+reservationCancelButton?.addEventListener("click", async (event) => {
+    const restore = window.beginButtonAction(event.currentTarget, "Membatalkan...");
+    if (!restore) return;
+    try {
+        await cancelReservation();
+    } finally {
+        restore();
+    }
+});
 detailFileDownload?.addEventListener("click", async (event) => {
     event.preventDefault();
     if (detailFileDownload.getAttribute("aria-busy") === "true") return;
@@ -278,6 +284,8 @@ detailFileDownload?.addEventListener("click", async (event) => {
         detailFileDownload.removeAttribute("aria-busy");
     }
 });
+reservationDetailClose?.addEventListener("click", closeReservationDetail);
+reservationDetailCancel?.addEventListener("click", closeReservationDetail);
 
 reservationDetailOverlay?.addEventListener("click", function (event) {
     if (event.target === reservationDetailOverlay) {

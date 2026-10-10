@@ -282,7 +282,7 @@ class ReservationController extends Controller
 
         // Check cancellation deadline for users
         $cancellationDeadline = $reservation->cancellation_deadline ?: ($reservation->start_at ? $reservation->start_at->copy()->subDay() : null);
-        if ($user->role === 'pengguna' && $cancellationDeadline && now()->isAfter($cancellationDeadline)) {
+        if ($user->isPengguna() && $cancellationDeadline && now()->isAfter($cancellationDeadline)) {
             return response()->json([
                 'message' => 'Batas waktu pembatalan telah terlewat.',
             ], 422);
