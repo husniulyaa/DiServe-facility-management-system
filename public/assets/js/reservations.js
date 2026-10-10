@@ -17,12 +17,33 @@ const detailTime = document.querySelector("#detail-time");
 const detailPurpose = document.querySelector("#detail-purpose");
 const detailStatus = document.querySelector("#detail-status");
 const detailFile = document.querySelector("#detail-file");
+const detailFileDownload = document.querySelector("#detail-file-download");
 const detailSubmitted = document.querySelector("#detail-submitted");
 const detailCancellationDeadline = document.querySelector("#detail-cancellation-deadline");
 
 const tableBody = document.querySelector(".reservations-table tbody");
 let selectedReservationButton = null;
 let currentReservationId = null;
+
+function showReservationMessage(message, allowRetry = false) {
+    if (!tableBody) return;
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 6;
+    cell.className = "reservations-table-message";
+    cell.textContent = message;
+    if (allowRetry) {
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.className = "reservation-table-action";
+        retry.textContent = "Coba lagi";
+        retry.addEventListener("click", loadReservations);
+        cell.append(" ", retry);
+    }
+    row.appendChild(cell);
+    tableBody.replaceChildren(row);
+    tableBody.hidden = false;
+}
 
 function openReservationDetail(button) {
     selectedReservationButton = button;
@@ -35,6 +56,7 @@ function openReservationDetail(button) {
     const status = button.dataset.status;
     const statusClass = button.dataset.statusClass;
     const file = button.dataset.file;
+    const fileUrl = button.dataset.fileUrl;
     const submitted = button.dataset.submitted;
     const cancellationDeadline = button.dataset.cancellationDeadline;
 
@@ -45,6 +67,10 @@ function openReservationDetail(button) {
     detailPurpose.textContent = purpose;
     detailStatus.textContent = status;
     detailFile.textContent = file;
+    if (detailFileDownload) {
+        detailFileDownload.href = fileUrl ? `${API_BASE}${fileUrl}` : "#";
+        detailFileDownload.classList.toggle("hidden", !fileUrl);
+    }
     detailSubmitted.textContent = submitted;
     detailCancellationDeadline.textContent = cancellationDeadline ? formatDateTime(cancellationDeadline) : "-";
 
@@ -160,6 +186,7 @@ function formatDateTime(dateTime) {
 
 async function loadReservations() {
     if (!tableBody) return;
+    showReservationMessage("Memuat reservasi...");
     try {
         const response = await fetch(`${API_BASE}/api/user/reservations`, {
             headers: {
@@ -168,67 +195,91 @@ async function loadReservations() {
             }
         });
 
-        if (!response.ok) return;
-
         const result = await response.json();
-        const reservations = result.data || [];
-
-        tableBody.innerHTML = "";
+        if (!response.ok) {
+            showReservationMessage(result.message || "Reservasi gagal dimuat.", true);
+            return;
+        }
+        const reservations = Array.isArray(result.data) ? result.data : [];
 
         if (reservations.length === 0) {
-            const tr = document.createElement("tr");
-            tr.innerHTML = `<td colspan="6" style="text-align: center; color: #64748b; padding: 24px;">Belum ada pengajuan reservasi.</td>`;
-            tableBody.appendChild(tr);
+            showReservationMessage("Belum ada pengajuan reservasi.");
             return;
         }
 
-        reservations.forEach(res => {
+        const rows = reservations.map((res) => {
             const row = document.createElement("tr");
-            row.innerHTML = `
-                <td>
-                    <div class="reservation-facility">
-                        <strong>${res.facility}</strong>
-                        <span>${res.facility_category || 'Fasilitas Kampus'}</span>
-                    </div>
-                </td>
-                <td>${res.date}</td>
-                <td>${res.time}</td>
-                <td>${res.purpose}</td>
-                <td><span class="reservation-status reservation-status-${res.status_class}">${res.status}</span></td>
-                <td>
-                    <button type="button" class="reservation-table-action reservation-detail-button"
-                        data-id="${res.id}"
-                        data-facility="${res.facility}"
-                        data-date="${res.date}"
-                        data-time="${res.time}"
-                        data-purpose="${res.purpose}"
-                        data-status="${res.status}"
-                        data-status-class="${res.status_class}"
-                        data-file="${res.file}"
-                        data-submitted="${res.submitted}"
-                        data-cancellation-deadline="${res.cancellation_deadline || ''}">
-                        Lihat
-                    </button>
-                </td>
-            `;
-            tableBody.appendChild(row);
-        });
+            const facilityCell = document.createElement("td");
+            const facilityInfo = document.createElement("div");
+            facilityInfo.className = "reservation-facility";
+            const facilityName = document.createElement("strong");
+            facilityName.textContent = res.facility || "Fasilitas Tidak Diketahui";
+            const facilityCategory = document.createElement("span");
+            facilityCategory.textContent = res.facility_category || "Fasilitas Kampus";
+            facilityInfo.append(facilityName, facilityCategory);
+            facilityCell.appendChild(facilityInfo);
 
-        tableBody.querySelectorAll(".reservation-detail-button").forEach(button => {
-            button.addEventListener("click", function () {
-                openReservationDetail(button);
-            });
+            const dateCell = document.createElement("td");
+            dateCell.textContent = res.date || "-";
+            const timeCell = document.createElement("td");
+            timeCell.textContent = res.time || "-";
+            const purposeCell = document.createElement("td");
+            purposeCell.textContent = res.purpose || "-";
+            const statusCell = document.createElement("td");
+            const status = document.createElement("span");
+            const statusClass = ["pending", "approved", "rejected", "cancelled"].includes(res.status_class)
+                ? res.status_class
+                : "pending";
+            status.className = `reservation-status reservation-status-${statusClass}`;
+            status.textContent = res.status || "Status tidak diketahui";
+            statusCell.appendChild(status);
+
+            const actionCell = document.createElement("td");
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "reservation-table-action reservation-detail-button";
+            button.textContent = "Lihat";
+            button.dataset.id = res.id ?? "";
+            button.dataset.facility = res.facility || "Fasilitas Tidak Diketahui";
+            button.dataset.date = res.date || "-";
+            button.dataset.time = res.time || "-";
+            button.dataset.purpose = res.purpose || "-";
+            button.dataset.status = res.status || "Status tidak diketahui";
+            button.dataset.statusClass = statusClass;
+            button.dataset.file = res.file || "Tidak ada berkas";
+            button.dataset.fileUrl = res.file_url || "";
+            button.dataset.submitted = res.submitted || "-";
+            button.dataset.cancellationDeadline = res.cancellation_deadline || "";
+            button.addEventListener("click", () => openReservationDetail(button));
+            actionCell.appendChild(button);
+            row.append(facilityCell, dateCell, timeCell, purposeCell, statusCell, actionCell);
+            return row;
         });
+        tableBody.replaceChildren(...rows);
     } catch (e) {
         console.error("Load reservations error:", e);
+        showReservationMessage("Tidak dapat memuat reservasi. Periksa koneksi lalu coba lagi.", true);
     }
 }
 
 reservationCancelButton.addEventListener("click", cancelReservation);
 reservationDetailClose.addEventListener("click", closeReservationDetail);
 reservationDetailCancel.addEventListener("click", closeReservationDetail);
+detailFileDownload?.addEventListener("click", async (event) => {
+    event.preventDefault();
+    if (detailFileDownload.getAttribute("aria-busy") === "true") return;
+    detailFileDownload.setAttribute("aria-busy", "true");
+    try {
+        await window.downloadProtectedFile(detailFileDownload.href, detailFile.textContent);
+    } catch (error) {
+        console.error("Download reservation file error:", error);
+        alert(error instanceof Error ? error.message : "Berkas tidak dapat diunduh.");
+    } finally {
+        detailFileDownload.removeAttribute("aria-busy");
+    }
+});
 
-reservationDetailOverlay.addEventListener("click", function (event) {
+reservationDetailOverlay?.addEventListener("click", function (event) {
     if (event.target === reservationDetailOverlay) {
         closeReservationDetail();
     }

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="assets/images/diserve-logo.png">
     <title>Reservasi Saya - DiServe</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,7 +15,7 @@
 <body>
     <header class="reservations-navbar">
         <a href="dashboard.html" class="reservations-brand">
-            <div class="reservations-logo"><img src="assets/images/logo-patung-kuda-undip.png" alt="Logo UNDIP"></div>
+            <div class="reservations-logo"><img src="assets/images/diserve-logo.png" alt="Logo DiServe"></div>
             <div class="reservations-brand-text">
                 <h1>DiServe</h1>
                 <span>Sistem Informasi Peminjaman dan Pelaporan Fasilitas Kampus</span>
@@ -54,7 +55,7 @@
                             <th>Aksi</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody hidden>
                         <tr>
                             <td>
                                 <div class="reservation-facility">
@@ -201,6 +202,7 @@
                 <div class="reservation-detail-item reservation-detail-file">
                     <span>Berkas Pendukung</span>
                     <strong id="detail-file">Proposal_Seminar.pdf</strong>
+                    <a id="detail-file-download" class="hidden" href="#">Unduh berkas</a>
                 </div>
                 <div class="reservation-detail-item">
                     <span>Diajukan</span>
@@ -224,6 +226,7 @@
             </div>
         </div>
     </div>
+    <script src="assets/js/action-state.js"></script>
     <script src="assets/js/reservations.js"></script>
 </body>
 </html>

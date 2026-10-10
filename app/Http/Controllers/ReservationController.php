@@ -64,8 +64,8 @@ class ReservationController extends Controller
                 'status' => $statusLabel,
                 'status_class' => $statusClass,
                 'file' => $res->supporting_file ? basename($res->supporting_file) : 'Tidak ada berkas',
-                'file_url' => $res->supporting_file ? Storage::url($res->supporting_file) : null,
-                'submitted' => $res->created_at ? $res->created_at->translatedFormat('d F Y, H:i') : '-',
+                'file_url' => $res->supporting_file ? "/api/reservations/{$res->id}/supporting-file" : null,
+                'submitted' => $res->created_at ? $res->created_at->translatedFormat('d F Y, H:i') . ' WIB' : '-',
                 'cancellation_deadline' => ($res->cancellation_deadline ?: ($res->start_at ? $res->start_at->copy()->subDay() : null))?->toISOString(),
                 'rejection_reason' => $res->rejection_reason,
                 'cancellation_reason' => $res->cancellation_reason,
@@ -195,7 +195,7 @@ class ReservationController extends Controller
         // File upload
         $filePath = null;
         if ($request->hasFile('supporting_file')) {
-            $filePath = $request->file('supporting_file')->store('reservations', 'public');
+            $filePath = $request->file('supporting_file')->store('reservations', 'local');
         }
 
         // Cancellation deadline: 24 hours prior to start_at
@@ -231,6 +231,25 @@ class ReservationController extends Controller
                 'status_class' => 'pending',
             ],
         ], 201);
+    }
+
+    public function supportingFile(Request $request, $id)
+    {
+        $reservation = Reservation::findOrFail($id);
+        $user = $request->user();
+
+        if ((int) $reservation->user_id !== (int) $user->id && !$user->isPetugas()) {
+            return response()->json(['message' => 'Anda tidak memiliki izin untuk mengakses berkas ini.'], 403);
+        }
+
+        if (!$reservation->supporting_file) {
+            return response()->json(['message' => 'Reservasi ini tidak memiliki berkas pendukung.'], 404);
+        }
+
+        $disk = Storage::disk('local')->exists($reservation->supporting_file) ? 'local' : 'public';
+        abort_unless(Storage::disk($disk)->exists($reservation->supporting_file), 404);
+
+        return Storage::disk($disk)->download($reservation->supporting_file, basename($reservation->supporting_file));
     }
 
     /**
@@ -328,9 +347,10 @@ class ReservationController extends Controller
                 'facility' => $res->facility ? $res->facility->name : '-',
                 'dates' => $dateRange,
                 'times' => "{$res->start_time} WIB - {$res->end_time} WIB",
+                'submitted' => $res->created_at ? $res->created_at->translatedFormat('d F Y, H:i') . ' WIB' : '-',
                 'purpose' => $res->purpose,
                 'filename' => $res->supporting_file ? basename($res->supporting_file) : 'Tidak ada berkas',
-                'file_url' => $res->supporting_file ? Storage::url($res->supporting_file) : null,
+                'file_url' => $res->supporting_file ? url("/api/reservations/{$res->id}/supporting-file") : null,
                 'status' => $statusText,
                 'status_class' => $statusClass,
                 'rejection_reason' => $res->rejection_reason,
