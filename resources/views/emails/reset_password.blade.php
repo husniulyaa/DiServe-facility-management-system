@@ -1,1 +1,1 @@
-<p>Halo {{ $user->name }},</p><p>Kami menerima permintaan untuk mengatur ulang password akun DiServe Anda.</p><p><a href="{{ url('/reset-password') }}?token={{ urlencode($token) }}&email={{ urlencode($user->email) }}">Atur ulang password</a></p><p>Link ini berlaku selama 60 menit.</p>
+<p>Halo {{ $user->name }},</p><p>Kami menerima permintaan untuk mengatur ulang password akun DiServe Anda.</p><p><a href="{{ url('/reset-password') }}?token={{ urlencode($token) }}&amp;email={{ urlencode($user->email) }}">Atur ulang password</a></p><p>Link ini berlaku selama 60 menit.</p>

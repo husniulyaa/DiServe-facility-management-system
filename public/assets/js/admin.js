@@ -2,6 +2,21 @@ const token = localStorage.getItem("auth_token");
 const user = JSON.parse(localStorage.getItem("user") || "null");
 const API_BASE = (window.location.protocol === "file:" || (window.location.port && window.location.port !== "8000")) ? "http://127.0.0.1:8000" : "";
 
+function setAdminTableMessage(selector, message, columns, onlyWhileLoading = false) {
+    const tbody = document.querySelector(selector);
+    if (!tbody) return;
+    if (onlyWhileLoading && !tbody.textContent.includes("Memuat...")) return;
+
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = columns;
+    cell.className = "text-center text-muted";
+    cell.textContent = message;
+    row.appendChild(cell);
+    tbody.replaceChildren(row);
+    tbody.hidden = false;
+}
+
 if (!token || !user || user.role !== "admin") {
     window.location.href = "login.html";
 }
@@ -75,6 +90,22 @@ window.addEventListener('click', function(event) {
 let currentEditingRowId = '';
 let currentEditingFacilityId = null;
 let currentEditingImage = '';
+let facilitiesById = {};
+
+function openEditModalForFacility(facilityId) {
+    const facility = facilitiesById[facilityId];
+    if (!facility) return;
+    openEditModal(
+        `fac-${facility.id}`,
+        facility.name,
+        facility.type,
+        facility.location,
+        facility.capacity,
+        facility.address || '',
+        facility.image_name || '',
+        facility.id
+    );
+}
 
 function openEditModal(rowId, name, category, location, capacity, address = '', imageFile = '', facilityId = null) {
     currentEditingRowId = rowId;
@@ -241,6 +272,7 @@ async function toggleFacilityStatus(rowId, facilityName, facilityId = null) {
     if (!row) return;
 
     const facId = facilityId || row.dataset.facilityId || rowId.replace('fac-', '');
+    facilityName = facilityName || row.querySelector('.font-bold')?.textContent || 'fasilitas';
     const badge = row.querySelector('.badge');
     const isCurrentlyActive = badge && badge.innerText.includes('Aktif');
 
@@ -275,6 +307,8 @@ async function toggleFacilityStatus(rowId, facilityName, facilityId = null) {
 // User / Account Management (US 13, US 14, US 15)
 function detectRole() {
     const emailInput = document.getElementById('user-email');
+    const passwordInput = document.getElementById('user-password');
+    const passwordConfirmationInput = document.getElementById('user-password-confirmation');
     const roleBox = document.getElementById('detected-role');
     if (!emailInput || !roleBox) {
         return;
@@ -312,7 +346,7 @@ async function submitAddUser() {
     const emailInput = document.getElementById('user-email');
     const roleBox = document.getElementById('detected-role');
 
-    if (!nameInput || !nimInput || !emailInput || !roleBox) {
+    if (!nameInput || !nimInput || !emailInput || !roleBox || !passwordInput || !passwordConfirmationInput) {
         return;
     }
 
@@ -320,6 +354,8 @@ async function submitAddUser() {
     const nim = nimInput.value.trim();
     const email = emailInput.value.trim();
     const role = roleBox.innerText;
+    const password = passwordInput.value;
+    const passwordConfirmation = passwordConfirmationInput.value;
 
     if (!name || !nim || !email) {
         alert('Semua field bertanda * wajib diisi!');
@@ -328,6 +364,14 @@ async function submitAddUser() {
 
     if (role.includes('Menunggu') || role.includes('tidak dikenali')) {
         alert('Pendaftaran ditolak! Harap gunakan format email resmi institusi yang valid.');
+        return;
+    }
+    if (password.length < 8 || !/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[@$!%*?&#_]/.test(password)) {
+        alert('Password harus memiliki minimal 8 karakter, huruf kecil, huruf besar, angka, dan karakter khusus.');
+        return;
+    }
+    if (password !== passwordConfirmation) {
+        alert('Konfirmasi password tidak sama.');
         return;
     }
 
@@ -342,7 +386,9 @@ async function submitAddUser() {
             body: JSON.stringify({
                 name: name,
                 identity_number: nim,
-                email: email
+                email: email,
+                password: password,
+                password_confirmation: passwordConfirmation
             })
         });
 
@@ -358,6 +404,8 @@ async function submitAddUser() {
         nameInput.value = '';
         nimInput.value = '';
         emailInput.value = '';
+        passwordInput.value = '';
+        passwordConfirmationInput.value = '';
         roleBox.innerText = 'Menunggu input email...';
         roleBox.className = 'form-input detected-role-box role-muted';
 
@@ -371,6 +419,7 @@ async function submitAddUser() {
 
 async function verifyAccount(rowId, userName, userId = null) {
     const uId = userId || rowId.replace('acc-', '');
+    userName = userName || document.getElementById(rowId)?.querySelector('.font-bold')?.textContent || 'pengguna';
 
     try {
         const response = await fetch(`${API_BASE}/api/admin/users/${uId}/verify`, {
@@ -387,10 +436,11 @@ async function verifyAccount(rowId, userName, userId = null) {
             return;
         }
 
-        alert(`Akun pengguna ${userName} berhasil diverifikasi dan aktif.`);
+        alert(data.message || `Akun pengguna ${userName} berhasil diverifikasi dan aktif.`);
         loadAdminData();
     } catch (e) {
         console.error('Verify error:', e);
+        alert('Tidak dapat menyetujui akun saat ini. Status akun belum dapat dipastikan; muat ulang daftar sebelum mencoba kembali.');
     }
 }
 
@@ -420,6 +470,7 @@ async function rejectAccount(rowId, userId = null) {
         loadAdminData();
     } catch (e) {
         console.error('Reject account error:', e);
+        alert('Tidak dapat menolak akun saat ini. Status akun belum dapat dipastikan; muat ulang daftar sebelum mencoba kembali.');
     }
 }
 
@@ -427,6 +478,7 @@ async function toggleAccountStatus(rowId, userName, userId = null) {
     const uId = userId || rowId.replace('acc-', '');
     const row = document.getElementById(rowId);
     if (!row) return;
+    userName = userName || row.querySelector('.font-bold')?.textContent || 'pengguna';
 
     const badge = row.querySelector('.badge');
     const isCurrentlyActive = badge && badge.innerText.includes('Aktif');
@@ -460,9 +512,44 @@ async function toggleAccountStatus(rowId, userName, userId = null) {
 }
 
 // Rekapitulasi & Export (US 17)
-function exportData(format) {
-    alert(`Mempersiapkan data rekapitulasi fasilitas...\nBerkas laporan dengan format [.${format}] akan mulai diunduh.`);
-    window.location.href = `${API_BASE}/api/admin/export/${format.toLowerCase()}`;
+async function exportData(format) {
+    const normalizedFormat = String(format).toLowerCase();
+    if (!["csv", "excel"].includes(normalizedFormat)) {
+        alert("Format PDF belum tersedia. Silakan pilih CSV atau Excel.");
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/api/admin/export/${normalizedFormat}`, {
+            headers: {
+                "Authorization": `Bearer ${token}`,
+                "Accept": "text/csv, application/json",
+            },
+        });
+        if (!response.ok) {
+            let message = "Ekspor rekapitulasi gagal.";
+            if (response.headers.get("content-type")?.includes("application/json")) {
+                const data = await response.json();
+                message = data.message || message;
+            }
+            throw new Error(message);
+        }
+
+        const blob = await response.blob();
+        const disposition = response.headers.get("content-disposition") || "";
+        const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || `rekapitulasi.${normalizedFormat}`;
+        const objectUrl = URL.createObjectURL(blob);
+        const download = document.createElement("a");
+        download.href = objectUrl;
+        download.download = filename;
+        document.body.appendChild(download);
+        download.click();
+        download.remove();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error) {
+        console.error("Export rekapitulasi error:", error);
+        alert(error instanceof Error ? error.message : "Ekspor rekapitulasi gagal.");
+    }
 }
 
 // Table Filter
@@ -512,14 +599,19 @@ function filterTable(inputId, tableId) {
             const cell = document.createElement('td');
             cell.colSpan = colCount;
             cell.className = 'text-center text-muted no-result-cell';
-            cell.innerHTML = `Data untuk pencarian <strong>"${input.value}"</strong> tidak ditemukan.`;
+            const strong = document.createElement('strong');
+            strong.textContent = `"${input.value}"`;
+            cell.append('Data untuk pencarian ', strong, ' tidak ditemukan.');
             noResultRow.appendChild(cell);
             tbody.appendChild(noResultRow);
         } else {
             const cell = noResultRow.querySelector('td');
             if (cell) {
                 cell.colSpan = colCount;
-                cell.innerHTML = `Data untuk pencarian <strong>"${input.value}"</strong> tidak ditemukan.`;
+                cell.replaceChildren();
+                const strong = document.createElement('strong');
+                strong.textContent = `"${input.value}"`;
+                cell.append('Data untuk pencarian ', strong, ' tidak ditemukan.');
             }
             noResultRow.classList.remove('hidden');
         }
@@ -530,6 +622,9 @@ function filterTable(inputId, tableId) {
 
 // Load real data from Backend for Admin
 async function loadAdminData() {
+    setAdminTableMessage('#table-facilities tbody', 'Memuat fasilitas...', 6);
+    setAdminTableMessage('#table-accounts tbody', 'Memuat akun...', 5);
+    setAdminTableMessage('#tab-reports .data-table tbody', 'Memuat rekapitulasi...', 5);
     try {
         // 1. Facilities Table
         const facRes = await fetch(`${API_BASE}/api/facilities`);
@@ -537,9 +632,13 @@ async function loadAdminData() {
             const facJson = await facRes.json();
             const facilities = facJson.data || [];
             const facTbody = document.querySelector('#table-facilities tbody');
+            facilitiesById = Object.fromEntries(facilities.map((facility) => [facility.id, facility]));
 
             if (facTbody) {
                 facTbody.innerHTML = '';
+                if (facilities.length === 0) {
+                    setAdminTableMessage('#table-facilities tbody', 'Belum ada data fasilitas.', 6);
+                }
                 facilities.forEach(fac => {
                     const rowId = `fac-${fac.id}`;
                     const isActive = fac.status === 'active';
@@ -552,21 +651,23 @@ async function loadAdminData() {
                     tr.id = rowId;
                     tr.dataset.facilityId = fac.id;
                     tr.innerHTML = `
-                        <td><div class="font-bold">${fac.name}</div></td>
-                        <td>${fac.type}</td>
-                        <td>${fac.location}</td>
-                        <td>${fac.capacity} Orang</td>
+                        <td><div class="font-bold">${window.escapeHTML(fac.name)}</div></td>
+                        <td>${window.escapeHTML(fac.type)}</td>
+                        <td>${window.escapeHTML(fac.location)}</td>
+                        <td>${window.escapeHTML(fac.capacity)} Orang</td>
                         <td><span class="${badgeClass}">${badgeText}</span></td>
                         <td class="text-center">
                             <div class="action-buttons">
-                                <button type="button" class="button button-outline button-fixed" onclick="openEditModal('${rowId}', '${fac.name.replace(/'/g, "\\'")}', '${fac.type}', '${fac.location}', ${fac.capacity}, '${(fac.address || '').replace(/'/g, "\\'")}', '${fac.image_name || ''}', ${fac.id})">Edit</button>
-                                <button class="${toggleBtnClass}" onclick="toggleFacilityStatus('${rowId}', '${fac.name.replace(/'/g, "\\'")}', ${fac.id})">${toggleBtnText}</button>
+                                <button type="button" class="button button-outline button-fixed" onclick="openEditModalForFacility(${Number(fac.id)})">Edit</button>
+                                <button type="button" class="${toggleBtnClass}" onclick="toggleFacilityStatus('${rowId}', null, ${Number(fac.id)})">${toggleBtnText}</button>
                             </div>
                         </td>
                     `;
                     facTbody.appendChild(tr);
                 });
             }
+        } else {
+            setAdminTableMessage('#table-facilities tbody', 'Gagal memuat fasilitas.', 6);
         }
 
         // 2. Accounts Table
@@ -589,23 +690,26 @@ async function loadAdminData() {
 
             if (userTbody) {
                 userTbody.innerHTML = '';
+                if (users.length === 0) {
+                    setAdminTableMessage('#table-accounts tbody', 'Belum ada data akun.', 5);
+                }
                 users.forEach(u => {
                     const rowId = u.row_id;
-                    const isPending = u.status === 'pending';
-                    const isActive = ['aktif', 'active'].includes(u.status);
+                    const isPending = ['pending', 'menunggu verifikasi'].includes(String(u.status).toLowerCase());
+                    const isActive = ['aktif', 'active'].includes(String(u.status).toLowerCase());
 
                     let actionHtml = '';
                     if (isPending) {
                         actionHtml = `
                             <div class="action-buttons">
-                                <button type="button" class="button button-primary button-fixed" onclick="verifyAccount('${rowId}', '${u.name.replace(/'/g, "\\'")}', ${u.id})">Setujui</button>
-                                <button type="button" class="button button-outline button-fixed" onclick="rejectAccount('${rowId}', ${u.id})">Tolak</button>
+                                <button type="button" class="button button-primary button-fixed" onclick="verifyAccount('${rowId}', null, ${Number(u.id)})">Setujui</button>
+                                <button type="button" class="button button-outline button-fixed" onclick="rejectAccount('${rowId}', ${Number(u.id)})">Tolak</button>
                             </div>
                         `;
                     } else if (isActive) {
-                        actionHtml = `<button class="button button-danger button-fixed" onclick="toggleAccountStatus('${rowId}', '${u.name.replace(/'/g, "\\'")}', ${u.id})">Cabut Akses</button>`;
+                        actionHtml = `<button type="button" class="button button-danger button-fixed" onclick="toggleAccountStatus('${rowId}', null, ${Number(u.id)})">Cabut Akses</button>`;
                     } else {
-                        actionHtml = `<button type="button" class="button button-primary button-fixed" onclick="toggleAccountStatus('${rowId}', '${u.name.replace(/'/g, "\\'")}', ${u.id})">Aktifkan Akses</button>`;
+                        actionHtml = `<button type="button" class="button button-primary button-fixed" onclick="toggleAccountStatus('${rowId}', null, ${Number(u.id)})">Aktifkan Akses</button>`;
                     }
 
                     const tr = document.createElement('tr');
@@ -613,17 +717,22 @@ async function loadAdminData() {
                     tr.dataset.userId = u.id;
                     tr.innerHTML = `
                         <td>
-                            <div class="font-bold">${u.name}</div>
-                            <div class="text-small text-muted">${u.email}</div>
+                            <div class="font-bold">${window.escapeHTML(u.name)}</div>
+                            <div class="text-small text-muted">${window.escapeHTML(u.email)}</div>
                         </td>
-                        <td>${u.identity_number}</td>
-                        <td><span class="text-accent">${u.role_label}</span></td>
-                        <td><span class="badge ${u.status_badge}">${u.status_text}</span></td>
+                        <td>${window.escapeHTML(u.identity_number)}</td>
+                        <td><span class="text-accent">${window.escapeHTML(u.role_label)}</span></td>
+                        <td>
+                            <span class="badge ${['success', 'warning', 'danger', 'neutral'].includes(u.status_badge) ? u.status_badge : 'neutral'}">${window.escapeHTML(u.status_text)}</span>
+                            ${String(u.status).toLowerCase() === 'ditolak' && u.rejection_reason ? `<div class="text-small text-muted">${window.escapeHTML(u.rejection_reason)}</div>` : ''}
+                        </td>
                         <td class="text-center">${actionHtml}</td>
                     `;
                     userTbody.appendChild(tr);
                 });
             }
+        } else {
+            setAdminTableMessage('#table-accounts tbody', 'Gagal memuat akun.', 5);
         }
 
         // 3. Rekapitulasi Table & Stats
@@ -642,7 +751,7 @@ async function loadAdminData() {
             // Stats values
             const statValues = document.querySelectorAll('#tab-reports .stat-value');
             if (statValues.length >= 3) {
-                statValues[0].textContent = summary.average_occupancy;
+                statValues[0].textContent = summary.average_occupancy ?? 'Belum tersedia';
                 statValues[1].textContent = summary.total_hours;
                 statValues[2].textContent = summary.total_damages;
             }
@@ -651,24 +760,49 @@ async function loadAdminData() {
             const rekapTbody = document.querySelector('#tab-reports .data-table tbody');
             if (rekapTbody) {
                 rekapTbody.innerHTML = '';
+                if (rekapFacilities.length === 0) {
+                    setAdminTableMessage('#tab-reports .data-table tbody', 'Belum ada data rekapitulasi.', 5);
+                }
                 rekapFacilities.forEach(fac => {
                     const dmgBadgeClass = fac.damage_count > 0 ? 'badge danger' : 'badge neutral';
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
-                        <td><div class="font-bold">${fac.name}</div></td>
-                        <td>${fac.location}</td>
-                        <td>${fac.total_bookings_label}</td>
-                        <td>${fac.occupancy_label}</td>
-                        <td><span class="${dmgBadgeClass}">${fac.damage_label}</span></td>
+                        <td><div class="font-bold">${window.escapeHTML(fac.name)}</div></td>
+                        <td>${window.escapeHTML(fac.location)}</td>
+                        <td>${window.escapeHTML(fac.total_bookings_label)}</td>
+                        <td>${window.escapeHTML(fac.occupancy_label)}</td>
+                        <td><span class="${dmgBadgeClass}">${window.escapeHTML(fac.damage_label)}</span></td>
                     `;
                     rekapTbody.appendChild(tr);
                 });
             }
+        } else {
+            document.querySelectorAll('#tab-reports .stat-value').forEach((element) => {
+                element.textContent = 'Tidak tersedia';
+            });
+            setAdminTableMessage('#tab-reports .data-table tbody', 'Gagal memuat rekapitulasi.', 5);
         }
     } catch (e) {
         console.error('Load admin data error:', e);
+        document.querySelectorAll('#tab-reports .stat-value').forEach((element) => {
+            if (element.textContent === 'Memuat...') element.textContent = 'Tidak tersedia';
+        });
+        setAdminTableMessage('#table-facilities tbody', 'Tidak dapat memuat fasilitas. Coba muat ulang halaman.', 6, true);
+        setAdminTableMessage('#table-accounts tbody', 'Tidak dapat memuat akun. Coba muat ulang halaman.', 5, true);
+        setAdminTableMessage('#tab-reports .data-table tbody', 'Tidak dapat memuat rekapitulasi. Coba muat ulang halaman.', 5, true);
     }
 }
 
 loadAdminData();
-window.verifyAccount=verifyAccount; window.rejectAccount=rejectAccount; window.toggleAccountStatus=toggleAccountStatus; window.toggleFacilityStatus=toggleFacilityStatus; window.openEditModal=openEditModal;
+window.verifyAccount=verifyAccount; window.rejectAccount=rejectAccount; window.toggleAccountStatus=toggleAccountStatus; window.toggleFacilityStatus=toggleFacilityStatus; window.openEditModal=openEditModal; window.openEditModalForFacility=openEditModalForFacility;
+
+[
+    ['submitAddFacility', 'Menambahkan...'],
+    ['submitEditFacility', 'Menyimpan...'],
+    ['toggleFacilityStatus', 'Memperbarui...'],
+    ['submitAddUser', 'Mendaftarkan...'],
+    ['verifyAccount', 'Menyetujui...'],
+    ['rejectAccount', 'Menolak...'],
+    ['toggleAccountStatus', 'Memperbarui...'],
+    ['exportData', 'Mengunduh...']
+].forEach(([name, label]) => window.wrapButtonAction(name, label));

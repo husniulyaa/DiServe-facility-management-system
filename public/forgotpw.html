@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="assets/images/diserve-logo.png">
     <title>Lupa Password - DiServe</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -22,7 +23,7 @@
         <section class="login-box">
             <div class="login-header">
                 <h1>Atur Ulang Password</h1>
-                <p id="forgot-subtitle">Masukkan email institusi Anda untuk menerima kode verifikasi.</p>
+                <p id="forgot-subtitle">Masukkan email institusi Anda. Jika email terdaftar, tautan untuk mengatur ulang password akan dikirim.</p>
             </div>
 
             <form class="login-form" id="forgot-form">
@@ -35,7 +36,7 @@
                     <p id="forgot-error" class="form-error"></p>
                 </div>
                 
-                <button type="submit" class="btn-login" id="submit-forgot">Kirim Kode Verifikasi</button>
+                <button type="submit" class="btn-login" id="submit-forgot">Kirim Tautan Reset</button>
                 
                 <div class="register-link">
                     <p>Sudah ingat password?</p>
@@ -46,7 +47,7 @@
             <div id="success-notification" class="hidden success-box">
                 <span class="material-symbols-outlined success-icon">mark_email_read</span>
                 <h3>Cek Email Anda</h3>
-                <p>Kami telah mengirimkan instruksi dan kode verifikasi ke email Anda. Silakan periksa inbox atau folder spam untuk mengatur password baru.</p>
+                <p>Permintaan reset telah diproses. Jika email terdaftar dan layanan email tersedia, periksa inbox atau folder spam.</p>
                 <a href="login.html" class="btn-login success-btn">Kembali ke Halaman Masuk</a>
             </div>
 

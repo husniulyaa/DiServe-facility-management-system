@@ -241,6 +241,9 @@ registerForm.addEventListener("submit", async function (event) {
     }
     registerForm.reset();
     updatePasswordRequirements();
+    window.setTimeout(() => {
+      window.location.href = "login.html";
+    }, 1800);
   } catch (err) {
     console.error("Register error:", err);
     alert("Tidak dapat terhubung ke server. Silakan coba lagi.");
