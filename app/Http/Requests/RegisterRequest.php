@@ -52,6 +52,17 @@ class RegisterRequest extends FormRequest
                 'string',
                 'min:8',
                 'confirmed',
+                function ($attribute, $value, $fail) {
+                    if (!preg_match('/[a-z]/', $value)) {
+                        $fail('Password harus mengandung huruf kecil.');
+                    } elseif (!preg_match('/[A-Z]/', $value)) {
+                        $fail('Password harus mengandung huruf besar.');
+                    } elseif (!preg_match('/[0-9]/', $value)) {
+                        $fail('Password harus mengandung angka.');
+                    } elseif (!preg_match('/[@$!%*?&#_]/', $value)) {
+                        $fail('Password harus mengandung karakter khusus.');
+                    }
+                },
             ],
         ];
     }

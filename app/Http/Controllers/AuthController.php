@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
@@ -19,11 +20,7 @@ class AuthController extends Controller
     {
         $user = User::where('email', strtolower($request->email))->first();
 
-        $isValid = $user && (
-            Hash::check($request->password, $user->password)
-            || ($request->password === 'password123' && Hash::check('Password123!', $user->password))
-            || ($request->password === 'Password123!' && Hash::check('password123', $user->password))
-        );
+        $isValid = $user && Hash::check($request->password, $user->password);
 
         // Email tidak ditemukan atau password salah
         if (!$user || !$isValid) {
@@ -43,7 +40,8 @@ class AuthController extends Controller
         $user->tokens()->delete();
 
         // Buat token Sanctum
-        $token = $user->createToken('auth_token')->plainTextToken;
+        $expiresAt = now()->addMinutes(120);
+        $token = $user->createToken('auth_token', ['*'], $expiresAt)->plainTextToken;
 
         // Front-end login.js expects 'user' for pengguna, 'petugas' for petugas, 'admin' for admin
         $normalizedRole = strtolower($user->role);
@@ -53,6 +51,7 @@ class AuthController extends Controller
             'message' => 'Login berhasil.',
             'token' => $token,
             'token_type' => 'Bearer',
+            'expires_at' => $expiresAt->toIso8601String(),
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
@@ -92,19 +91,47 @@ class AuthController extends Controller
     public function forgotPassword(Request $request): JsonResponse
     {
         $request->validate(['email' => ['required', 'email']]);
+        if (config('mail.default') === 'log') {
+            return response()->json([
+                'message' => 'Layanan email belum dikonfigurasi untuk mengirim ke inbox. Hubungi administrator.',
+            ], 503);
+        }
+
         $email = strtolower($request->email);
         $user = User::where('email', $email)->first();
 
         if ($user) {
             $token = Str::random(64);
+            $createdAt = now();
             DB::table('password_reset_tokens')->updateOrInsert(
                 ['email' => $email],
-                ['token' => Hash::make($token), 'created_at' => now()]
+                ['token' => Hash::make($token), 'created_at' => $createdAt]
             );
-            Mail::to($user->email)->send(new \App\Mail\ResetPasswordMail($user, $token));
+            try {
+                Mail::to($user->email)->send(new \App\Mail\ResetPasswordMail($user, $token));
+            } catch (\Throwable $exception) {
+                DB::transaction(function () use ($email, $token, $createdAt) {
+                    $record = DB::table('password_reset_tokens')
+                        ->where('email', $email)
+                        ->where('created_at', $createdAt)
+                        ->lockForUpdate()
+                        ->first();
+
+                    if ($record && Hash::check($token, $record->token)) {
+                        DB::table('password_reset_tokens')->where('email', $email)->delete();
+                    }
+                });
+
+                Log::error('Password reset email delivery failed.', [
+                    'user_id' => $user->id,
+                    'exception' => $exception::class,
+                ]);
+            }
         }
 
-        return response()->json(['message' => 'Jika email terdaftar, tautan pengaturan ulang password telah dikirim ke email Anda.']);
+        return response()->json([
+            'message' => 'Permintaan reset telah diproses. Jika alamat tersebut terdaftar dan email dapat dikirim, tautan reset akan masuk ke inbox. Periksa juga folder spam; jika tidak menerima email, coba lagi atau hubungi administrator.',
+        ], 202);
     }
 
     public function resetPassword(Request $request): JsonResponse
@@ -112,22 +139,49 @@ class AuthController extends Controller
         $request->validate([
             'email' => ['required', 'email'],
             'token' => ['required', 'string'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'password' => [
+                'required',
+                'string',
+                'min:8',
+                'confirmed',
+                function ($attribute, $value, $fail) {
+                    if (!preg_match('/[a-z]/', $value)
+                        || !preg_match('/[A-Z]/', $value)
+                        || !preg_match('/[0-9]/', $value)
+                        || !preg_match('/[@$!%*?&#_]/', $value)) {
+                        $fail('Password harus memiliki huruf kecil, huruf besar, angka, dan karakter khusus.');
+                    }
+                },
+            ],
         ]);
 
         $email = strtolower($request->email);
-        $record = DB::table('password_reset_tokens')->where('email', $email)->first();
-        if (!$record || !$record->created_at || Carbon::parse($record->created_at)->addMinutes(60)->isPast() || !Hash::check($request->token, $record->token)) {
+        $user = DB::transaction(function () use ($email, $request) {
+            $record = DB::table('password_reset_tokens')
+                ->where('email', $email)
+                ->lockForUpdate()
+                ->first();
+
+            if (!$record || !$record->created_at || Carbon::parse($record->created_at)->addMinutes(60)->isPast() || !Hash::check($request->token, $record->token)) {
+                return null;
+            }
+
+            $user = User::where('email', $email)->lockForUpdate()->first();
+            if (!$user) {
+                return null;
+            }
+
+            $user->password = $request->password;
+            $user->save();
+            $user->tokens()->delete();
+            DB::table('password_reset_tokens')->where('email', $email)->delete();
+
+            return $user;
+        });
+
+        if (!$user) {
             return response()->json(['message' => 'Tautan reset password tidak valid atau sudah kedaluwarsa.'], 422);
         }
-
-        $user = User::where('email', $email)->first();
-        if (!$user) return response()->json(['message' => 'Akun tidak ditemukan.'], 404);
-
-        $user->password = $request->password;
-        $user->save();
-        $user->tokens()->delete();
-        DB::table('password_reset_tokens')->where('email', $email)->delete();
 
         return response()->json(['message' => 'Password berhasil diubah. Silakan masuk dengan password baru.']);
     }

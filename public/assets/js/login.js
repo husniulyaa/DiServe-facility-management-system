@@ -7,6 +7,10 @@ const passwordToggle = document.querySelector("#toggle-password");
 const passwordIcon = passwordToggle ? passwordToggle.querySelector(".material-symbols-outlined") : null;
 const loginButton = document.querySelector(".btn-login");
 
+if (new URLSearchParams(window.location.search).get("expired") === "1") {
+    passwordError.textContent = "Sesi Anda berakhir. Silakan masuk kembali.";
+}
+
 const emailPattern =
     /^[a-z0-9._-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/;
 
