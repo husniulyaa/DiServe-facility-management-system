@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="assets/images/diserve-logo.png">
     <title>Laporkan Masalah - DiServe</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,7 +15,7 @@
 <body>
     <header class="report-navbar">
         <a href="dashboard.html" class="report-brand">
-            <div class="report-logo"><img src="assets/images/logo-patung-kuda-undip.png" alt="Logo UNDIP"></div>
+            <div class="report-logo"><img src="assets/images/diserve-logo.png" alt="Logo DiServe"></div>
             <div class="report-brand-text"><h1>DiServe</h1>
                 <span>Sistem Informasi Peminjaman dan Pelaporan Fasilitas Kampus</span></div>
         </a>
@@ -143,6 +144,10 @@
                         <span>Tanggal laporan</span>
                         <strong id="success-report-date">22 September 2026</strong>
                     </div>
+                    <div class="report-success-item">
+                        <span>Waktu pengajuan</span>
+                        <strong id="success-report-submitted">-</strong>
+                    </div>
                 </div>
                 <div class="report-success-description">
                     <span>Deskripsi Masalah</span>
@@ -163,6 +168,8 @@
             </div>
         </div>
     </div>
+    <script src="assets/js/business-rules.js"></script>
+    <script src="assets/js/action-state.js"></script>
     <script src="assets/js/report.js"></script>
 </body>
 </html>
