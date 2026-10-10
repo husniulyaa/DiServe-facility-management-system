@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Route;
 // --- 1. Public Authentication & Visitors Routes ---
 Route::post('/auth/login', [AuthController::class, 'login']);
 Route::post('/auth/register', [AuthController::class, 'register']);
-Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword']);
+Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
 Route::post('/auth/reset-password', [AuthController::class, 'resetPassword']);
 
 // Public facility catalog & availability (Visitors - US 1, US 2)
@@ -26,9 +26,11 @@ Route::get('/facilities/{id}', [FacilityController::class, 'show']);
 Route::get('/facilities/{id}/availability', [FacilityController::class, 'availability']);
 
 // --- 2. Authenticated Routes (Common) ---
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'token.idle'])->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
+    Route::get('/reservations/{id}/supporting-file', [ReservationController::class, 'supportingFile']);
+    Route::get('/reports/{id}/photo', [DamageReportController::class, 'photo']);
 
     // --- 3. Pengguna / User Routes (US 3, US 4, US 5, US 6, US 7) ---
     Route::middleware('role:pengguna,user')->group(function () {
@@ -71,5 +73,5 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 });
 
-// Admin export route (accessible via token or download link)
-Route::get('/admin/export/{format}', [AdminController::class, 'exportRekap']);
+Route::get('/admin/export/{format}', [AdminController::class, 'exportRekap'])
+    ->middleware(['auth:sanctum', 'token.idle', 'role:admin']);
