@@ -11,7 +11,10 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class AdminController extends Controller
 {
@@ -79,6 +82,7 @@ class AdminController extends Controller
                 'status' => $u->status,
                 'status_text' => $statusText,
                 'status_badge' => $statusBadge,
+                'rejection_reason' => $u->rejection_reason,
             ];
         });
 
@@ -99,7 +103,20 @@ class AdminController extends Controller
             'name' => 'required|string|max:255',
             'identity_number' => 'required|string|max:50',
             'email' => 'required|string|email|max:150|unique:users,email',
-            'password' => 'nullable|string|min:8',
+            'password' => [
+                'required',
+                'string',
+                'min:8',
+                'confirmed',
+                function ($attribute, $value, $fail) {
+                    if (!preg_match('/[a-z]/', $value)
+                        || !preg_match('/[A-Z]/', $value)
+                        || !preg_match('/[0-9]/', $value)
+                        || !preg_match('/[@$!%*?&#_]/', $value)) {
+                        $fail('Password harus memiliki huruf kecil, huruf besar, angka, dan karakter khusus.');
+                    }
+                },
+            ],
         ], [
             'name.required' => 'Nama lengkap wajib diisi.',
             'identity_number.required' => 'NIM / NIP wajib diisi.',
@@ -122,13 +139,11 @@ class AdminController extends Controller
             ], 422);
         }
 
-        $password = $request->filled('password') ? $request->password : 'Password123!';
-
         $user = User::create([
             'name' => $request->name,
             'identity_number' => $request->identity_number,
             'email' => $email,
-            'password' => Hash::make($password),
+            'password' => Hash::make($request->password),
             'role' => $role,
             'status' => 'aktif',
         ]);
@@ -145,11 +160,47 @@ class AdminController extends Controller
     public function verifyUser(Request $request, $id): JsonResponse
     {
         $user = User::findOrFail($id);
-        $user->update(['status' => 'aktif']);
-        Mail::to($user->email)->send(new \App\Mail\AccountApprovedMail($user));
+        if (strtolower($user->status) !== 'pending') {
+            return response()->json(['message' => 'Hanya akun yang menunggu verifikasi yang dapat disetujui.'], 422);
+        }
+
+        try {
+            if (! $user->update(['status' => 'aktif'])) {
+                return response()->json([
+                    'message' => 'Status akun gagal disimpan. Silakan coba lagi atau hubungi administrator.',
+                    'email_sent' => false,
+                ], 503);
+            }
+        } catch (QueryException $exception) {
+            Log::error('Account approval status could not be saved.', [
+                'user_id' => $user->id,
+                'exception' => $exception::class,
+            ]);
+
+            return response()->json([
+                'message' => 'Status akun gagal disimpan. Silakan coba lagi atau hubungi administrator.',
+                'email_sent' => false,
+            ], 503);
+        }
+
+        $emailSent = false;
+        if (config('mail.default') !== 'log') {
+            try {
+                Mail::to($user->email)->send(new \App\Mail\AccountApprovedMail($user));
+                $emailSent = true;
+            } catch (\Throwable $exception) {
+                Log::error('Account approval notification could not be sent.', [
+                    'user_id' => $user->id,
+                    'exception' => $exception::class,
+                ]);
+            }
+        }
 
         return response()->json([
-            'message' => "Akun pengguna {$user->name} berhasil diverifikasi dan aktif.",
+            'message' => $emailSent
+                ? "Akun pengguna {$user->name} berhasil diverifikasi dan aktif."
+                : "Akun pengguna {$user->name} berhasil diaktifkan, tetapi notifikasi email tidak terkirim.",
+            'email_sent' => $emailSent,
             'user' => $user,
         ]);
     }
@@ -159,11 +210,39 @@ class AdminController extends Controller
      */
     public function rejectUser(Request $request, $id): JsonResponse
     {
+        $request->validate([
+            'reason' => ['required', 'string', 'min:3', 'max:1000'],
+        ]);
         $user = User::findOrFail($id);
-        $reason = $request->input('reason', 'Pendaftaran akun ditolak oleh administrator.');
+        if (strtolower($user->status) !== 'pending') {
+            return response()->json(['message' => 'Hanya akun yang menunggu verifikasi yang dapat ditolak.'], 422);
+        }
 
-        // Soft reject status or remove
-        $user->update(['status' => 'ditolak']);
+        if (! Schema::hasColumn('users', 'rejection_reason')) {
+            return response()->json([
+                'message' => 'Penyimpanan alasan penolakan belum tersedia. Minta administrator menyiapkan pembaruan database sebelum menolak akun.',
+            ], 503);
+        }
+
+        try {
+            if (! $user->update([
+                'status' => 'ditolak',
+                'rejection_reason' => $request->reason,
+            ])) {
+                return response()->json([
+                    'message' => 'Status akun gagal disimpan. Silakan coba lagi atau hubungi administrator.',
+                ], 503);
+            }
+        } catch (QueryException $exception) {
+            Log::error('Account rejection status could not be saved.', [
+                'user_id' => $user->id,
+                'exception' => $exception::class,
+            ]);
+
+            return response()->json([
+                'message' => 'Status akun gagal disimpan. Silakan coba lagi atau hubungi administrator.',
+            ], 503);
+        }
 
         return response()->json([
             'message' => "Pendaftaran akun {$user->name} ditolak.",
@@ -205,40 +284,24 @@ class AdminController extends Controller
     public function rekap(): JsonResponse
     {
         $facilities = Facility::all();
-        $totalReservationsCount = Reservation::count();
         $totalApprovedReservations = Reservation::whereIn('status', ['approved', 'disetujui'])->get();
 
-        // Calculate total hours booked
         $totalHours = 0;
         foreach ($totalApprovedReservations as $res) {
             $start = Carbon::parse($res->start_at ?: $res->reservation_date);
             $end = Carbon::parse($res->end_at ?: $res->reservation_date);
-            $totalHours += max(1, $start->diffInHours($end));
-        }
-        if ($totalHours === 0) {
-            $totalHours = 1420; // Default baseline for frontend consistency
+            if ($end->greaterThan($start)) {
+                $totalHours += $start->diffInMinutes($end) / 60;
+            }
         }
 
         $totalDamageCount = DamageReport::count();
 
         $facilityStats = [];
-        $totalOccupancyPercentages = 0;
 
         foreach ($facilities as $fac) {
             $resCount = Reservation::where('facility_id', $fac->id)->count();
-            $approvedCount = Reservation::where('facility_id', $fac->id)->whereIn('status', ['approved', 'disetujui'])->count();
             $dmgCount = DamageReport::where('facility_id', $fac->id)->count();
-
-            // Occupancy percentage formula (benchmarked per month/facility)
-            $occupancyRate = min(98, max(20, round(($approvedCount * 18) + ($resCount * 5))));
-            if ($fac->name === 'Muladi Dome') $occupancyRate = 82;
-            if ($fac->name === 'Polytron Stadium') $occupancyRate = 65;
-            if (str_contains($fac->name, 'Auditorium')) $occupancyRate = 75;
-            if (str_contains($fac->name, 'Acintya')) $occupancyRate = 88;
-            if (str_contains($fac->name, 'Terpadu')) $occupancyRate = 30;
-            if (str_contains($fac->name, 'Sentral FK')) $occupancyRate = 58;
-
-            $totalOccupancyPercentages += $occupancyRate;
 
             $facilityStats[] = [
                 'id' => $fac->id,
@@ -246,19 +309,18 @@ class AdminController extends Controller
                 'location' => $fac->location,
                 'total_bookings' => $resCount,
                 'total_bookings_label' => "{$resCount} Kali",
-                'occupancy_rate' => $occupancyRate,
-                'occupancy_label' => "{$occupancyRate}%",
+                'occupancy_rate' => null,
+                'occupancy_label' => 'Belum tersedia',
                 'damage_count' => $dmgCount,
                 'damage_label' => "{$dmgCount} Laporan",
             ];
         }
 
-        $avgOccupancy = count($facilities) > 0 ? round($totalOccupancyPercentages / count($facilities), 1) : 72.1;
-
         return response()->json([
             'summary' => [
-                'average_occupancy' => $avgOccupancy . '%',
-                'total_hours' => number_format($totalHours) . ' Jam',
+                'average_occupancy' => null,
+                'occupancy_note' => 'Belum tersedia: jadwal operasional dan definisi perhitungan okupansi perlu ditetapkan.',
+                'total_hours' => number_format($totalHours, 1, ',', '.') . ' Jam',
                 'total_damages' => $totalDamageCount . ' Laporan',
             ],
             'facilities' => $facilityStats,
@@ -270,70 +332,13 @@ class AdminController extends Controller
      */
     public function exportRekap(string $format): Response
     {
+        $format = strtolower($format);
+        if (!in_array($format, ['csv', 'excel'], true)) {
+            abort(422, 'Format ekspor tidak didukung. Gunakan CSV atau Excel.');
+        }
+
         $rekapData = $this->rekap()->getData(true);
         $facilities = $rekapData['facilities'];
-        $summary = $rekapData['summary'];
-
-        $format = strtolower($format);
-
-        if ($format === 'pdf') {
-            $html = "
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset='utf-8'>
-                <title>Rekapitulasi Laporan Fasilitas DiServe</title>
-                <style>
-                    body { font-family: sans-serif; font-size: 12px; margin: 20px; color: #1e293b; }
-                    h1 { font-size: 18px; margin-bottom: 4px; }
-                    p.sub { font-size: 11px; color: #64748b; margin-top: 0; }
-                    .stats { margin: 20px 0; display: table; width: 100%; }
-                    .stat-box { display: table-cell; padding: 10px; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 4px; text-align: center; }
-                    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                    th, td { border: 1px solid #cbd5e1; padding: 8px 12px; text-align: left; }
-                    th { background-color: #f1f5f9; font-weight: bold; }
-                </style>
-            </head>
-            <body>
-                <h1>DiServe - Rekapitulasi Penggunaan & Kerusakan Fasilitas</h1>
-                <p class='sub'>Tanggal Unduh: " . date('d F Y, H:i') . " WIB</p>
-                <div class='stats'>
-                    <div class='stat-box'><strong>Rata-rata Okupansi:</strong> {$summary['average_occupancy']}</div>
-                    <div class='stat-box'><strong>Total Jam Peminjaman:</strong> {$summary['total_hours']}</div>
-                    <div class='stat-box'><strong>Frekuensi Kerusakan:</strong> {$summary['total_damages']}</div>
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Fasilitas</th>
-                            <th>Lokasi</th>
-                            <th>Total Peminjaman</th>
-                            <th>Tingkat Okupansi</th>
-                            <th>Frekuensi Kerusakan</th>
-                        </tr>
-                    </thead>
-                    <tbody>";
-            foreach ($facilities as $fac) {
-                $html .= "
-                        <tr>
-                            <td><strong>{$fac['name']}</strong></td>
-                            <td>{$fac['location']}</td>
-                            <td>{$fac['total_bookings_label']}</td>
-                            <td>{$fac['occupancy_label']}</td>
-                            <td>{$fac['damage_label']}</td>
-                        </tr>";
-            }
-            $html .= "
-                    </tbody>
-                </table>
-            </body>
-            </html>";
-
-            return response($html, 200, [
-                'Content-Type' => 'application/pdf',
-                'Content-Disposition' => 'attachment; filename="rekapitulasi_fasilitas_diserve.html"',
-            ]);
-        }
 
         // CSV or Excel format
         $delimiter = ($format === 'excel') ? "\t" : ",";
