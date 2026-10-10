@@ -73,15 +73,27 @@ function filterFacilities() {
 
 async function loadFacilitiesFromApi() {
   if (!grid) return;
+  grid.replaceChildren();
+  const loading = document.createElement("p");
+  loading.className = "facility-grid-state";
+  loading.textContent = "Memuat fasilitas...";
+  grid.appendChild(loading);
   const API_BASE = (window.location.protocol === "file:" || (window.location.port && window.location.port !== "8000")) ? "http://127.0.0.1:8000" : "";
   try {
     const res = await fetch(`${API_BASE}/api/facilities`);
-    if (!res.ok) return;
+    if (!res.ok) throw new Error(`Facility request failed (${res.status})`);
     const json = await res.json();
-    const facilities = json.data;
-    if (facilities && facilities.length > 0) {
-      grid.innerHTML = "";
-      facilities.forEach((fac) => {
+    const facilities = json.data || [];
+    grid.replaceChildren();
+    if (facilities.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "facility-grid-state";
+      empty.textContent = "Belum ada fasilitas yang tersedia.";
+      grid.appendChild(empty);
+      return;
+    }
+
+    facilities.forEach((fac) => {
         const card = document.createElement("article");
         card.className = "facility-card";
         card.dataset.name = fac.name;
@@ -92,62 +104,61 @@ async function loadFacilitiesFromApi() {
         const stLower = (fac.status || "").toLowerCase();
         const isMaint = stLower === "maintenance" || stLower === "dalam perbaikan";
         const isInactive = stLower === "inactive" || stLower === "nonaktif";
-        let statusBadgeClass = "available";
-        let statusBadgeText = "Tersedia";
-
-        if (isMaint) {
-          statusBadgeClass = "unavailable";
-          statusBadgeText = "Dalam Perbaikan";
-        } else if (isInactive) {
-          statusBadgeClass = "unavailable";
-          statusBadgeText = "Nonaktif";
-        }
-
-        const imgSrc = fac.image_name
-          ? `assets/images/${fac.image_name}`
+        const statusBadgeClass = isMaint ? "maintenance" : (isInactive ? "broken" : "available");
+        const statusBadgeText = isMaint ? "Dalam Perbaikan" : (isInactive ? "Nonaktif" : "Tersedia");
+        const cardImage = document.createElement("img");
+        cardImage.className = "facility-card-image";
+        cardImage.alt = fac.name || "Foto fasilitas";
+        cardImage.src = fac.image_name
+          ? `assets/images/${encodeURIComponent(fac.image_name)}`
           : "assets/images/muladi-dome.png";
+        cardImage.addEventListener("error", () => {
+          cardImage.src = "assets/images/muladi-dome.png";
+        }, { once: true });
 
-        card.innerHTML = `
-          <img src="${imgSrc}" alt="${fac.name}" class="facility-card-image" onerror="this.src='assets/images/muladi-dome.png'" />
-          <div class="facility-card-overlay"></div>
-          <div class="facility-card-top">
-            <span class="facility-card-type">${fac.type}</span>
-            <span class="facility-card-availability ${statusBadgeClass}">
-              ${statusBadgeText}
-            </span>
-          </div>
-          <div class="facility-card-content">
-            <h3 class="facility-card-title">${fac.name}</h3>
-            <div class="facility-card-meta">
-              <span>
-                <span class="material-symbols-outlined">location_on</span>
-                ${fac.location}
-              </span>
-              <span>
-                <span class="material-symbols-outlined">groups</span>
-                ${fac.capacity} orang
-              </span>
-            </div>
-            <p class="facility-card-address">
-              <span class="material-symbols-outlined">signpost</span>
-              ${fac.address || ""}
-            </p>
-            <button
-              type="button"
-              class="facility-card-button"
-              onclick="openAvailability('${fac.name.replace(/'/g, "\\'")}')"
-            >
-              Lihat ketersediaan
-              <span class="material-symbols-outlined">arrow_forward</span>
-            </button>
-          </div>
-        `;
+        const overlay = document.createElement("div");
+        overlay.className = "facility-card-overlay";
+        const top = document.createElement("div");
+        top.className = "facility-card-top";
+        const type = document.createElement("span");
+        type.className = "facility-card-type";
+        type.textContent = fac.type || "";
+        const availability = document.createElement("span");
+        availability.className = `facility-card-availability ${statusBadgeClass}`;
+        availability.textContent = statusBadgeText;
+        top.append(type, availability);
+
+        const content = document.createElement("div");
+        content.className = "facility-card-content";
+        const title = document.createElement("h3");
+        title.className = "facility-card-title";
+        title.textContent = fac.name || "";
+        const meta = document.createElement("div");
+        meta.className = "facility-card-meta";
+        const location = document.createElement("span");
+        location.textContent = fac.location || "";
+        const capacity = document.createElement("span");
+        capacity.textContent = `${fac.capacity ?? 0} orang`;
+        meta.append(location, capacity);
+        const address = document.createElement("p");
+        address.className = "facility-card-address";
+        address.textContent = fac.address || "";
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "facility-card-button";
+        button.textContent = "Lihat ketersediaan";
+        button.addEventListener("click", () => openAvailability(fac.slug || String(fac.id)));
+        content.append(title, meta, address, button);
+        card.append(cardImage, overlay, top, content);
         grid.appendChild(card);
-      });
-      filterFacilities();
-    }
-  } catch (e) {
-    console.error("Error loading facilities:", e);
+    });
+    filterFacilities();
+  } catch (error) {
+    console.error("Error loading facilities:", error);
+    const errorState = document.createElement("p");
+    errorState.className = "facility-grid-state";
+    errorState.textContent = "Fasilitas gagal dimuat. Muat ulang halaman untuk mencoba lagi.";
+    grid.replaceChildren(errorState);
   }
 }
 
