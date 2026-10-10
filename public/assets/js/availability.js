@@ -63,14 +63,16 @@ async function fetchAvailability(facilityName, date) {
   }
 }
 
-function openAvailability(facilityName) {
-  currentFacilityForAvailability = facilityName;
+function openAvailability(facilityIdentifier, facilityDisplayName = null) {
+  const resolvedIdentifier = facilityIdentifier || "";
+  const resolvedDisplayName = facilityDisplayName || resolvedIdentifier;
+  currentFacilityForAvailability = resolvedIdentifier;
   if (availabilityFacilityName) {
-    availabilityFacilityName.textContent = facilityName;
+    availabilityFacilityName.textContent = resolvedDisplayName || "Fasilitas";
   }
 
   const selectedDate = availabilityDate ? availabilityDate.value : "";
-  fetchAvailability(facilityName, selectedDate);
+  fetchAvailability(resolvedIdentifier, selectedDate);
 
   availabilityOverlay.classList.add("active");
   document.body.style.overflow = "hidden";

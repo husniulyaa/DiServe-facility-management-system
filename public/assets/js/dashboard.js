@@ -40,23 +40,33 @@ if (storedUser && storedUser.name) {
 }
 
 logoutButton?.addEventListener("click", async function (event) {
-    window.beginButtonAction(event.currentTarget, "Keluar...");
+    const restore = window.beginButtonAction(event.currentTarget, "Keluar...");
+    if (!restore) return;
+    let logoutResponse = null;
+
     try {
-        await fetch(`${API_BASE}/api/auth/logout`, {
+        logoutResponse = await fetch(`${API_BASE}/api/auth/logout`, {
             method: "POST",
             headers: {
                 "Authorization": `Bearer ${token}`,
                 "Accept": "application/json"
             }
         });
-    } catch (e) {
-        console.error("Logout error:", e);
-    } finally {
-        const sessionExpired = !localStorage.getItem("auth_token");
-        localStorage.removeItem("auth_token");
-        localStorage.removeItem("user");
-        window.location.href = sessionExpired ? "login.html" : "index.html";
+    } catch (error) {
+        console.error("Logout error:", error);
     }
+
+    if (!logoutResponse?.ok) {
+        if (localStorage.getItem("auth_token")) {
+            restore();
+            alert("Logout gagal. Sesi Anda masih aktif; periksa koneksi lalu coba lagi.");
+        }
+        return;
+    }
+
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("user");
+    window.location.replace("index.html");
 });
 
 function openReservationDetail(button) {
@@ -73,6 +83,8 @@ function openReservationDetail(button) {
     const fileUrl = button.dataset.fileUrl;
     const submitted = button.dataset.submitted;
     const cancellationDeadline = button.dataset.cancellationDeadline;
+    const rejectionReason = button.dataset.rejectionReason || "";
+    const cancellationReason = button.dataset.cancellationReason || "";
 
     detailFacility.textContent = facility;
     detailFacilityName.textContent = facility;
@@ -87,6 +99,17 @@ function openReservationDetail(button) {
     }
     detailSubmitted.textContent = submitted;
     detailCancellationDeadline.textContent = cancellationDeadline ? formatDateTime(cancellationDeadline) : "-";
+
+    const reasonBox = document.getElementById("detail-reason-box");
+    const reasonText = document.getElementById("detail-reason");
+    const reasonLabel = document.getElementById("detail-reason-label");
+    if (reasonBox && reasonText && reasonLabel) {
+        const showReason = ["rejected", "cancelled"].includes(statusClass);
+        const reason = statusClass === "rejected" ? rejectionReason : cancellationReason;
+        reasonBox.classList.toggle("hidden", !showReason);
+        reasonLabel.textContent = statusClass === "rejected" ? "Alasan penolakan" : "Alasan pembatalan";
+        reasonText.textContent = reason || "Alasan tidak dicantumkan.";
+    }
 
     detailStatus.className = "dashboard-status";
 
@@ -437,6 +460,8 @@ function renderReservations(reservations) {
             statusClass,
             file: reservation.file || "-",
             fileUrl: reservation.file_url || "",
+            rejectionReason: reservation.rejection_reason || "",
+            cancellationReason: reservation.cancellation_reason || "",
             submitted: reservation.submitted || "-",
             cancellationDeadline: reservation.cancellation_deadline || ""
         });

@@ -59,6 +59,7 @@ function openReservationDetail(button) {
     const fileUrl = button.dataset.fileUrl;
     const submitted = button.dataset.submitted;
     const cancellationDeadline = button.dataset.cancellationDeadline;
+    const rejectionReason = button.dataset.rejectionReason || "";
 
     detailFacility.textContent = facility;
     detailFacilityName.textContent = facility;
@@ -68,11 +69,19 @@ function openReservationDetail(button) {
     detailStatus.textContent = status;
     detailFile.textContent = file;
     if (detailFileDownload) {
-        detailFileDownload.href = fileUrl ? `${API_BASE}${fileUrl}` : "#";
+        detailFileDownload.href = fileUrl ? window.resolveApiUrl(fileUrl) : "#";
         detailFileDownload.classList.toggle("hidden", !fileUrl);
     }
     detailSubmitted.textContent = submitted;
     detailCancellationDeadline.textContent = cancellationDeadline ? formatDateTime(cancellationDeadline) : "-";
+
+    const detailReasonBox = document.getElementById("detail-reason-box");
+    const detailReason = document.getElementById("detail-reason");
+    if (detailReasonBox && detailReason) {
+        const showReason = statusClass === "rejected" && rejectionReason;
+        detailReasonBox.classList.toggle("hidden", !showReason);
+        detailReason.textContent = showReason ? rejectionReason : "-";
+    }
 
     detailStatus.className = "status-" + statusClass;
 
@@ -248,6 +257,7 @@ async function loadReservations() {
             button.dataset.statusClass = statusClass;
             button.dataset.file = res.file || "Tidak ada berkas";
             button.dataset.fileUrl = res.file_url || "";
+            button.dataset.rejectionReason = res.rejection_reason || "";
             button.dataset.submitted = res.submitted || "-";
             button.dataset.cancellationDeadline = res.cancellation_deadline || "";
             button.addEventListener("click", () => openReservationDetail(button));

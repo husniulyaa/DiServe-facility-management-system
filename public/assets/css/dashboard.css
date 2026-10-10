@@ -507,6 +507,14 @@
   gap: 5px;
 }
 
+.reservation-reason {
+  grid-column: 1 / -1;
+  padding: 12px 14px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-kecil);
+  background: var(--danger-bg);
+}
+
 .reservation-detail-item-label {
   color: var(--text-muted);
   font-size: 10px;

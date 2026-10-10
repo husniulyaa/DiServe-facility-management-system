@@ -67,12 +67,63 @@ window.downloadProtectedFile = async function (url, filename) {
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 };
 
+document.querySelectorAll("#logout-button").forEach((button) => {
+  button.addEventListener("click", async () => {
+    if (button.disabled || button.dataset.actionBusy === "true") return;
+
+    const token = localStorage.getItem("auth_token");
+    if (!token) {
+      localStorage.removeItem("user");
+      window.location.replace("index.html");
+      return;
+    }
+
+    const apiBase =
+      window.location.protocol === "file:" ||
+      (window.location.port && window.location.port !== "8000")
+        ? "http://127.0.0.1:8000"
+        : "";
+    button.disabled = true;
+    button.dataset.actionBusy = "true";
+    button.setAttribute("aria-busy", "true");
+
+    try {
+      const response = await fetch(`${apiBase}/api/auth/logout`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok && response.status !== 401) {
+        const data = response.headers.get("content-type")?.includes("application/json")
+          ? await response.json()
+          : null;
+        throw new Error(data?.message || "Logout gagal. Silakan coba lagi.");
+      }
+
+      localStorage.removeItem("auth_token");
+      localStorage.removeItem("user");
+      window.location.replace("index.html");
+    } catch (error) {
+      console.error("Logout error:", error);
+      button.disabled = false;
+      delete button.dataset.actionBusy;
+      button.removeAttribute("aria-busy");
+      alert(error instanceof Error ? error.message : "Logout gagal. Periksa koneksi lalu coba lagi.");
+    }
+  });
+});
+
 if (localStorage.getItem("auth_token")) {
   const originalFetch = window.fetch.bind(window);
   let redirectingAfterExpiration = false;
   window.fetch = async function (...args) {
     const response = await originalFetch(...args);
-    if (response.status === 401 && !redirectingAfterExpiration) {
+    const requestUrl = args[0] instanceof Request ? args[0].url : String(args[0]);
+    const isLogoutRequest = new URL(requestUrl, window.location.href).pathname.endsWith("/api/auth/logout");
+    if (response.status === 401 && !isLogoutRequest && !redirectingAfterExpiration) {
       redirectingAfterExpiration = true;
       localStorage.removeItem("auth_token");
       localStorage.removeItem("user");

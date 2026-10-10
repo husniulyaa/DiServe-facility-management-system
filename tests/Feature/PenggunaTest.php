@@ -263,6 +263,45 @@ class PenggunaTest extends TestCase
             ->assertJsonMissing(['purpose' => 'Reservasi Milik User B']);
     }
 
+    public function test_user_reservation_history_includes_rejection_and_cancellation_reasons(): void
+    {
+        $targetDate = now()->addDays(5)->format('Y-m-d');
+        Reservation::create([
+            'user_id' => $this->userA->id,
+            'facility_id' => $this->facility->id,
+            'start_date' => $targetDate,
+            'end_date' => $targetDate,
+            'start_time' => '08:00',
+            'end_time' => '09:00',
+            'purpose' => 'Permohonan dengan alasan penolakan.',
+            'status' => 'rejected',
+            'rejection_reason' => 'Fasilitas sedang dalam perbaikan.',
+        ]);
+        Reservation::create([
+            'user_id' => $this->userA->id,
+            'facility_id' => $this->facility->id,
+            'start_date' => $targetDate,
+            'end_date' => $targetDate,
+            'start_time' => '09:00',
+            'end_time' => '10:00',
+            'purpose' => 'Permohonan dengan alasan pembatalan.',
+            'status' => 'cancelled',
+            'cancellation_reason' => 'Jadwal kegiatan berubah.',
+        ]);
+
+        $this->actingAs($this->userA, 'sanctum')
+            ->getJson('/api/user/reservations')
+            ->assertOk()
+            ->assertJsonFragment([
+                'status_class' => 'rejected',
+                'rejection_reason' => 'Fasilitas sedang dalam perbaikan.',
+            ])
+            ->assertJsonFragment([
+                'status_class' => 'cancelled',
+                'cancellation_reason' => 'Jadwal kegiatan berubah.',
+            ]);
+    }
+
     public function test_us6_and_us7_create_and_view_damage_reports(): void
     {
         Storage::fake('public');

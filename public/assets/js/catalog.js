@@ -106,15 +106,27 @@ async function loadFacilitiesFromApi() {
         const isInactive = stLower === "inactive" || stLower === "nonaktif";
         const statusBadgeClass = isMaint ? "maintenance" : (isInactive ? "broken" : "available");
         const statusBadgeText = isMaint ? "Dalam Perbaikan" : (isInactive ? "Nonaktif" : "Tersedia");
+
+        const hasImage = Boolean((fac.image || fac.image_name || "").toString().trim());
+        const imageUrl = hasImage ? (fac.image || `assets/images/${encodeURIComponent(fac.image_name)}`) : "";
         const cardImage = document.createElement("img");
         cardImage.className = "facility-card-image";
         cardImage.alt = fac.name || "Foto fasilitas";
-        cardImage.src = fac.image_name
-          ? `assets/images/${encodeURIComponent(fac.image_name)}`
-          : "assets/images/muladi-dome.png";
-        cardImage.addEventListener("error", () => {
-          cardImage.src = "assets/images/muladi-dome.png";
-        }, { once: true });
+        const placeholder = document.createElement("div");
+        placeholder.className = "facility-card-image facility-card-image-placeholder";
+        placeholder.textContent = "Foto belum tersedia";
+        placeholder.hidden = true;
+
+        if (imageUrl) {
+          cardImage.src = imageUrl;
+          cardImage.addEventListener("error", () => {
+            cardImage.hidden = true;
+            placeholder.hidden = false;
+          }, { once: true });
+        } else {
+          cardImage.hidden = true;
+          placeholder.hidden = false;
+        }
 
         const overlay = document.createElement("div");
         overlay.className = "facility-card-overlay";
@@ -147,9 +159,11 @@ async function loadFacilitiesFromApi() {
         button.type = "button";
         button.className = "facility-card-button";
         button.textContent = "Lihat ketersediaan";
-        button.addEventListener("click", () => openAvailability(fac.slug || String(fac.id)));
+        const facilityIdentifier = fac.slug || String(fac.id || "");
+        const facilityDisplayName = fac.name || facilityIdentifier;
+        button.addEventListener("click", () => openAvailability(facilityIdentifier, facilityDisplayName));
         content.append(title, meta, address, button);
-        card.append(cardImage, overlay, top, content);
+        card.append(cardImage, placeholder, overlay, top, content);
         grid.appendChild(card);
     });
     filterFacilities();
@@ -191,6 +205,38 @@ if (capacityFilter) {
   capacityFilter.addEventListener("change", () => {
     filterFacilities();
   });
+}
+
+const navLoginLink = document.querySelector(".navbar-login");
+if (navLoginLink) {
+  const sessionToken = localStorage.getItem("auth_token");
+  if (sessionToken) {
+    const API_BASE = (window.location.protocol === "file:" || (window.location.port && window.location.port !== "8000")) ? "http://127.0.0.1:8000" : "";
+    fetch(`${API_BASE}/api/auth/me`, {
+      headers: {
+        "Authorization": "Bearer " + sessionToken,
+        "Accept": "application/json"
+      }
+    }).then(async (response) => {
+      if (response.status === 401) {
+        localStorage.removeItem("auth_token");
+        localStorage.removeItem("user");
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(`Session verification failed (${response.status})`);
+      }
+
+      const result = await response.json();
+      const role = String(result.user?.role || "").toLowerCase();
+      if (["user", "pengguna"].includes(role)) {
+        navLoginLink.textContent = "Ajukan Reservasi";
+        navLoginLink.href = "reservation.html";
+      }
+    }).catch((error) => {
+      console.error("Session verification failed:", error);
+    });
+  }
 }
 
 loadFacilitiesFromApi();

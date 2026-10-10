@@ -46,7 +46,7 @@
             <span>Pengguna</span>
           </div>
         </div>
-        <button type="button" class="dashboard-logout" id="logout-button">
+        <button type="button" class="dashboard-logout" id="logout-button" aria-label="Keluar">
           <span class="material-symbols-outlined">logout</span>
         </button>
       </div>
@@ -59,6 +59,10 @@
           <p>Kelola reservasi dan laporan fasilitas kampusmu dengan mudah</p>
         </div>
         <div class="dashboard-action-buttons">
+          <a href="index.html" class="dashboard-secondary-button">
+            <span class="material-symbols-outlined">arrow_back</span>
+            Kembali ke Katalog
+          </a>
           <a href="reservation.html" class="dashboard-primary-button">
             <span class="material-symbols-outlined">add</span>
             Ajukan Reservasi
@@ -227,6 +231,10 @@
           <div class="reservation-detail-item">
             <span class="reservation-detail-item-label">Keperluan</span>
             <strong id="detail-purpose">Seminar</strong>
+          </div>
+          <div class="reservation-detail-item reservation-reason hidden" id="detail-reason-box">
+            <span class="reservation-detail-item-label" id="detail-reason-label">Alasan pembatalan</span>
+            <strong id="detail-reason">Alasan tidak dicantumkan.</strong>
           </div>
           <div class="reservation-detail-item">
             <span class="reservation-detail-item-label">Berkas pendukung</span>
