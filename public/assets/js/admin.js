@@ -344,6 +344,8 @@ async function submitAddUser() {
     const nameInput = document.getElementById('user-name');
     const nimInput = document.getElementById('user-nim');
     const emailInput = document.getElementById('user-email');
+    const passwordInput = document.getElementById('user-password');
+    const passwordConfirmationInput = document.getElementById('user-password-confirmation');
     const roleBox = document.getElementById('detected-role');
 
     if (!nameInput || !nimInput || !emailInput || !roleBox || !passwordInput || !passwordConfirmationInput) {
@@ -514,8 +516,8 @@ async function toggleAccountStatus(rowId, userName, userId = null) {
 // Rekapitulasi & Export (US 17)
 async function exportData(format) {
     const normalizedFormat = String(format).toLowerCase();
-    if (!["csv", "excel"].includes(normalizedFormat)) {
-        alert("Format PDF belum tersedia. Silakan pilih CSV atau Excel.");
+    if (!["csv", "excel", "pdf"].includes(normalizedFormat)) {
+        alert("Format ekspor tidak didukung. Silakan pilih PDF, Excel, atau CSV.");
         return;
     }
 
@@ -523,7 +525,7 @@ async function exportData(format) {
         const response = await fetch(`${API_BASE}/api/admin/export/${normalizedFormat}`, {
             headers: {
                 "Authorization": `Bearer ${token}`,
-                "Accept": "text/csv, application/json",
+                "Accept": "application/pdf, text/csv, application/json",
             },
         });
         if (!response.ok) {

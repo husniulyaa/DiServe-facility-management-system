@@ -215,7 +215,13 @@ class AdminTest extends TestCase
         // Export PDF
         $exportPdf = $this->withHeader('Authorization', "Bearer {$token}")
             ->get('/api/admin/export/pdf');
-        $exportPdf->assertStatus(422);
+        $exportPdf->assertStatus(200)
+            ->assertHeader('Content-Type', 'application/pdf')
+            ->assertHeader('Content-Disposition', 'attachment; filename="rekapitulasi_fasilitas_diserve.pdf"');
+        $this->assertStringStartsWith('%PDF-1.4', $exportPdf->getContent());
+        $this->assertStringEndsWith('%%EOF', $exportPdf->getContent());
+        $this->assertStringContainsString('Total Jam Peminjaman', $exportPdf->getContent());
+        $this->assertStringContainsString('Muladi Dome', $exportPdf->getContent());
     }
 
     public function test_security_pengguna_cannot_access_admin_endpoints(): void

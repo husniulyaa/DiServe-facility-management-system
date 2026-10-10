@@ -542,14 +542,31 @@ class AuditRegressionTest extends TestCase
         $response->assertJsonPath('facilities.0.occupancy_rate', null);
     }
 
-    public function test_admin_export_requires_admin_auth_and_rejects_fake_pdf_export(): void
+    public function test_admin_pdf_export_requires_admin_auth_and_returns_a_pdf_attachment(): void
     {
-        $this->getJson('/api/admin/export/csv')->assertUnauthorized();
+        $this->getJson('/api/admin/export/pdf')->assertUnauthorized();
+
+        User::create([
+            'name' => 'Audit Non-admin',
+            'identity_number' => '240601000004',
+            'email' => 'audit.nonadmin@students.undip.ac.id',
+            'password' => 'Password123!',
+            'role' => 'pengguna',
+            'status' => 'aktif',
+        ]);
+        $nonAdmin = User::where('email', 'audit.nonadmin@students.undip.ac.id')->firstOrFail();
+        $this->actingAs($nonAdmin, 'sanctum')
+            ->getJson('/api/admin/export/pdf')
+            ->assertForbidden();
 
         $admin = $this->activeUser('Password123!', 'admin');
-        $this->actingAs($admin, 'sanctum')
+        $response = $this->actingAs($admin, 'sanctum')
             ->get('/api/admin/export/pdf')
-            ->assertUnprocessable();
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf')
+            ->assertHeader('Content-Disposition', 'attachment; filename="rekapitulasi_fasilitas_diserve.pdf"');
+        $this->assertStringStartsWith('%PDF-1.4', $response->getContent());
+        $this->assertStringEndsWith('%%EOF', $response->getContent());
     }
 
     private function activeUser(string $password = 'Password123!', string $role = 'pengguna'): User

@@ -333,12 +333,19 @@ class AdminController extends Controller
     public function exportRekap(string $format): Response
     {
         $format = strtolower($format);
-        if (!in_array($format, ['csv', 'excel'], true)) {
-            abort(422, 'Format ekspor tidak didukung. Gunakan CSV atau Excel.');
+        if (!in_array($format, ['csv', 'excel', 'pdf'], true)) {
+            abort(422, 'Format ekspor tidak didukung. Gunakan PDF, CSV, atau Excel.');
         }
 
         $rekapData = $this->rekap()->getData(true);
         $facilities = $rekapData['facilities'];
+
+        if ($format === 'pdf') {
+            return response($this->buildRekapPdf($rekapData), 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="rekapitulasi_fasilitas_diserve.pdf"',
+            ]);
+        }
 
         // CSV or Excel format
         $delimiter = ($format === 'excel') ? "\t" : ",";
@@ -352,6 +359,95 @@ class AdminController extends Controller
         return response($output, 200, [
             'Content-Type' => 'text/csv; charset=UTF-8',
             'Content-Disposition' => "attachment; filename=\"rekapitulasi_fasilitas_diserve.{$ext}\"",
+        ]);
+    }
+
+    private function buildRekapPdf(array $rekapData): string
+    {
+        $summary = $rekapData['summary'] ?? [];
+        $lines = [
+            'Total Jam Peminjaman: ' . ($summary['total_hours'] ?? '0 Jam'),
+            'Total Frekuensi Kerusakan: ' . ($summary['total_damages'] ?? '0 Laporan'),
+            '',
+            'Rincian Fasilitas:',
+        ];
+
+        foreach ($rekapData['facilities'] ?? [] as $facility) {
+            $lines[] = 'Fasilitas: ' . ($facility['name'] ?? '-') . ' | Lokasi: ' . ($facility['location'] ?? '-');
+            $lines[] = 'Peminjaman: ' . ($facility['total_bookings_label'] ?? '-') .
+                ' | Okupansi: ' . ($facility['occupancy_label'] ?? '-') .
+                ' | Kerusakan: ' . ($facility['damage_label'] ?? '-');
+        }
+
+        $encodedLines = [];
+        foreach ($lines as $line) {
+            $line = preg_replace('/[\r\n\t]+/', ' ', (string) $line) ?? '';
+            $encoded = iconv('UTF-8', 'Windows-1252//TRANSLIT//IGNORE', $line);
+            if ($encoded === false) {
+                $encoded = preg_replace('/[^\x20-\x7E]/', '?', $line) ?? '';
+            }
+            foreach (explode("\n", wordwrap($encoded, 88, "\n", true)) as $wrappedLine) {
+                $encodedLines[] = $wrappedLine;
+            }
+        }
+
+        $pages = array_chunk($encodedLines ?: ['Tidak ada data fasilitas.'], 44);
+        $objects = [
+            1 => '<< /Type /Catalog /Pages 2 0 R >>',
+        ];
+        $pageReferences = [];
+        $fontObjectId = 3 + (2 * count($pages));
+
+        foreach ($pages as $pageIndex => $pageLines) {
+            $pageObjectId = 3 + (2 * $pageIndex);
+            $contentObjectId = $pageObjectId + 1;
+            $pageReferences[] = "{$pageObjectId} 0 R";
+
+            $pageText = "BT\n";
+            $pageText .= "1 0 0 1 50 790 Tm\n/F1 16 Tf\n(" .
+                $this->escapePdfText('Rekapitulasi Fasilitas DiServe') . ") Tj\n";
+            $y = 762;
+            foreach ($pageLines as $line) {
+                $pageText .= "1 0 0 1 50 {$y} Tm\n/F1 10 Tf\n(" .
+                    $this->escapePdfText($line) . ") Tj\n";
+                $y -= 16;
+            }
+            $pageText .= "ET\n";
+
+            $objects[$pageObjectId] = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] " .
+                "/Resources << /Font << /F1 {$fontObjectId} 0 R >> >> /Contents {$contentObjectId} 0 R >>";
+            $objects[$contentObjectId] = "<< /Length " . strlen($pageText) . " >>\nstream\n{$pageText}endstream";
+        }
+
+        $objects[2] = '<< /Type /Pages /Kids [' . implode(' ', $pageReferences) . '] /Count ' . count($pages) . ' >>';
+        $objects[$fontObjectId] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
+        ksort($objects);
+
+        $pdf = "%PDF-1.4\n";
+        $offsets = [0];
+        foreach ($objects as $objectId => $object) {
+            $offsets[$objectId] = strlen($pdf);
+            $pdf .= "{$objectId} 0 obj\n{$object}\nendobj\n";
+        }
+
+        $xrefOffset = strlen($pdf);
+        $pdf .= "xref\n0 " . (count($objects) + 1) . "\n";
+        $pdf .= "0000000000 65535 f \n";
+        for ($objectId = 1; $objectId <= count($objects); $objectId++) {
+            $pdf .= sprintf("%010d 00000 n \n", $offsets[$objectId]);
+        }
+        $pdf .= "trailer\n<< /Size " . (count($objects) + 1) . " /Root 1 0 R >>\n";
+        $pdf .= "startxref\n{$xrefOffset}\n%%EOF";
+
+        return $pdf;
+    }
+
+    private function escapePdfText(string $text): string
+    {
+        return strtr($text, [
+            '\\' => '\\\\',
+            '(' => '\(',
+            ')' => '\)',
         ]);
     }
 }

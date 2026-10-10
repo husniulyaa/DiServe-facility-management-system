@@ -62,7 +62,7 @@
             <span>Admin</span>
           </div>
         </div>
-        <button class="logout-button" onclick="window.location.href='login.html'">
+        <button class="logout-button" id="logout-button">
           <span class="material-symbols-outlined">logout</span> Logout
         </button>
       </div>
@@ -358,7 +358,7 @@
             </button>
             <div id="export-dropdown" class="dropdown-menu hidden">
               <button class="dropdown-item" onclick="exportData('PDF'); toggleDropdown('export-dropdown')">
-                <span class="material-symbols-outlined icon-small">picture_as_pdf</span> Format PDF (belum tersedia)
+                <span class="material-symbols-outlined icon-small">picture_as_pdf</span> Format PDF
               </button>
               <button class="dropdown-item" onclick="exportData('Excel'); toggleDropdown('export-dropdown')">
                 <span class="material-symbols-outlined icon-small">table_view</span> Format Excel
