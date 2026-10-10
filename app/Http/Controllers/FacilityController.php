@@ -190,10 +190,10 @@ class FacilityController extends Controller
         }
         Reservation::expirePassedPendingReservations();
 
-        // Generate standard time slots from 07:00 to 20:00 (30-min intervals)
+        // Generate standard time slots from 06:00 to 23:00 (30-min intervals)
         $slots = [];
-        $startHour = 7;
-        $endHour = 19;
+        $startHour = 6;
+        $endHour = 22;
 
         for ($h = $startHour; $h <= $endHour; $h++) {
             $hStr = str_pad($h, 2, '0', STR_PAD_LEFT);
