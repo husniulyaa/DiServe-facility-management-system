@@ -30,10 +30,10 @@ class DatabaseSetupSeedAlignmentTest extends TestCase
         $this->assertTrue($admin->isAdmin());
         $this->assertTrue($admin->isActive());
 
-        // Can login with password123 (from seed.go)
+        // Seeded demo accounts use the single password configured by DatabaseSeeder.
         $loginRes = $this->postJson('/api/auth/login', [
             'email' => 'ira.admin@admin.undip.ac.id',
-            'password' => 'password123',
+            'password' => 'Password123!',
         ]);
         $loginRes->assertStatus(200)->assertJsonPath('user.role', 'admin');
 
@@ -45,7 +45,7 @@ class DatabaseSetupSeedAlignmentTest extends TestCase
 
         $loginPetugas = $this->postJson('/api/auth/login', [
             'email' => 'arifpratama35@facility.undip.ac.id',
-            'password' => 'password123',
+            'password' => 'Password123!',
         ]);
         $loginPetugas->assertStatus(200)->assertJsonPath('user.role', 'petugas');
 
@@ -58,7 +58,7 @@ class DatabaseSetupSeedAlignmentTest extends TestCase
         // Pending user cannot login
         $loginNabila = $this->postJson('/api/auth/login', [
             'email' => 'nabilakay@students.undip.ac.id',
-            'password' => 'password123',
+            'password' => 'Password123!',
         ]);
         $loginNabila->assertStatus(403);
     }

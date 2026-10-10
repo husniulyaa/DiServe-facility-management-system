@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\DamageReport;
 use App\Models\Facility;
 use App\Models\Reservation;
 use App\Models\User;
@@ -17,12 +16,15 @@ class PenggunaTest extends TestCase
     use RefreshDatabase;
 
     private User $userA;
+
     private User $userB;
+
     private Facility $facility;
 
     protected function setUp(): void
     {
         parent::setUp();
+        $this->travelTo(Carbon::parse('2026-10-09 10:00:00', 'Asia/Jakarta'));
 
         $this->userA = User::create([
             'name' => 'User A',
@@ -110,7 +112,7 @@ class PenggunaTest extends TestCase
 
         $response->assertStatus(422)
             ->assertJsonFragment([
-                'message' => 'Fasilitas sudah memiliki reservasi yang disetujui pada rentang waktu tersebut. Silakan pilih waktu atau fasilitas lain.'
+                'message' => 'Fasilitas sudah memiliki reservasi yang disetujui pada rentang waktu tersebut. Silakan pilih waktu atau fasilitas lain.',
             ]);
     }
 
