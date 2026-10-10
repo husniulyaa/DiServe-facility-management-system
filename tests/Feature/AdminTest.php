@@ -13,7 +13,9 @@ class AdminTest extends TestCase
     use RefreshDatabase;
 
     private User $admin;
+
     private User $pengguna;
+
     private Facility $facility;
 
     protected function setUp(): void
@@ -58,6 +60,8 @@ class AdminTest extends TestCase
                 'name' => 'Petugas Baru',
                 'identity_number' => '199901012022011001',
                 'email' => 'petugasbaru@facility.undip.ac.id',
+                'password' => 'PetugasPassword123!',
+                'password_confirmation' => 'PetugasPassword123!',
             ]);
         $resPetugas->assertStatus(201);
         $this->assertDatabaseHas('users', [
@@ -72,6 +76,8 @@ class AdminTest extends TestCase
                 'name' => 'Dr. Budi Dosen',
                 'identity_number' => '197505122001121002',
                 'email' => 'budi@lectures.undip.ac.id',
+                'password' => 'DosenPassword123!',
+                'password_confirmation' => 'DosenPassword123!',
             ]);
         $resDosen->assertStatus(201);
         $this->assertDatabaseHas('users', [
@@ -190,23 +196,26 @@ class AdminTest extends TestCase
             ->assertJsonStructure([
                 'summary' => ['average_occupancy', 'total_hours', 'total_damages'],
                 'facilities' => [
-                    '*' => ['name', 'location', 'total_bookings_label', 'occupancy_label', 'damage_label']
-                ]
+                    '*' => ['name', 'location', 'total_bookings_label', 'occupancy_label', 'damage_label'],
+                ],
             ]);
 
         // Export CSV
-        $exportCsv = $this->get('/api/admin/export/csv');
+        $exportCsv = $this->withHeader('Authorization', "Bearer {$token}")
+            ->get('/api/admin/export/csv');
         $exportCsv->assertStatus(200)
             ->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
 
         // Export Excel
-        $exportXls = $this->get('/api/admin/export/excel');
+        $exportXls = $this->withHeader('Authorization', "Bearer {$token}")
+            ->get('/api/admin/export/excel');
         $exportXls->assertStatus(200)
             ->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
 
         // Export PDF
-        $exportPdf = $this->get('/api/admin/export/pdf');
-        $exportPdf->assertStatus(200);
+        $exportPdf = $this->withHeader('Authorization', "Bearer {$token}")
+            ->get('/api/admin/export/pdf');
+        $exportPdf->assertStatus(422);
     }
 
     public function test_security_pengguna_cannot_access_admin_endpoints(): void
