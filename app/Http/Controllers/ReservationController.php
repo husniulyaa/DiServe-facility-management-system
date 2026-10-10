@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Facility;
 use App\Models\Reservation;
+use App\Support\SubmissionWindow;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -83,6 +84,13 @@ class ReservationController extends Controller
     {
         $user = $request->user();
 
+        if (!SubmissionWindow::isOpen()) {
+            return response()->json([
+                'message' => 'Pengajuan reservasi hanya dapat dikirim pukul 07.00–20.00 WIB.',
+                'errors' => ['submission_time' => ['Waktu pengajuan berada di luar jam layanan.']],
+            ], 422);
+        }
+
         if (!$request->has('facility') && $request->has('facility_id')) {
             $request->merge(['facility' => $request->facility_id]);
         }
@@ -146,8 +154,15 @@ class ReservationController extends Controller
 
         $startMinutes = ((int) substr($request->start_time, 0, 2) * 60) + (int) substr($request->start_time, 3, 2);
         $endMinutes = ((int) substr($request->end_time, 0, 2) * 60) + (int) substr($request->end_time, 3, 2);
-        if ($startMinutes < 420 || $startMinutes >= 1200 || $endMinutes < 420 || $endMinutes > 1200) {
-            return response()->json(['message' => 'Reservasi hanya dapat dilakukan pada pukul 07:00 sampai 20:00.', 'errors' => ['start_time' => ['Waktu reservasi harus antara 07:00 dan 20:00.']]], 422);
+        if (
+            $startMinutes < 360 || $startMinutes >= 1380
+            || $endMinutes < 360 || $endMinutes > 1380
+            || $startMinutes % 30 !== 0 || $endMinutes % 30 !== 0
+        ) {
+            return response()->json([
+                'message' => 'Waktu pemakaian harus berada pada slot 30 menit antara pukul 06.00 dan 23.00 WIB.',
+                'errors' => ['start_time' => ['Waktu pemakaian di luar slot operasional.']],
+            ], 422);
         }
 
         // Validation: start_at < end_at
@@ -209,6 +224,7 @@ class ReservationController extends Controller
                 'facility' => $facility->name,
                 'date' => $reservation->start_date->translatedFormat('d F Y'),
                 'time' => "{$reservation->start_time} - {$reservation->end_time}",
+                'submitted' => $reservation->created_at->translatedFormat('d F Y, H:i') . ' WIB',
                 'purpose' => $reservation->purpose,
                 'file' => $filePath ? basename($filePath) : 'Tidak ada berkas',
                 'status' => 'Menunggu',
