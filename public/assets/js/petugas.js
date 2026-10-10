@@ -27,9 +27,44 @@ let currentReservationRowId = null;
 let currentDamageId = null;
 let currentDamageRowId = null;
 
+function setPetugasTableMessage(selector, message, columns, onlyWhileLoading = false) {
+    const tbody = document.querySelector(selector);
+    if (!tbody) return;
+    if (onlyWhileLoading && !tbody.textContent.includes("Memuat...")) return;
+
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = columns;
+    cell.className = "text-center text-muted";
+    cell.textContent = message;
+    row.appendChild(cell);
+    tbody.replaceChildren(row);
+    tbody.hidden = false;
+}
+
 function switchTab(tabId) {
     document.querySelectorAll('.tab-content').forEach(tab => {
         tab.classList.add('hidden');
+    });
+
+    document.getElementById('dmg-photo-download')?.addEventListener('click', async (event) => {
+        event.preventDefault();
+        const photoLink = event.currentTarget;
+        if (!(photoLink instanceof HTMLAnchorElement) || photoLink.classList.contains('hidden')) return;
+        if (photoLink.getAttribute('aria-busy') === 'true') return;
+
+        photoLink.setAttribute('aria-busy', 'true');
+        try {
+            await window.downloadProtectedFile(
+                photoLink.href,
+                document.getElementById('dmg-photo')?.textContent || 'foto'
+            );
+        } catch (error) {
+            console.error('Download report photo error:', error);
+            alert(error instanceof Error ? error.message : 'Foto tidak dapat diunduh.');
+        } finally {
+            photoLink.removeAttribute('aria-busy');
+        }
     });
 
     const selectedTab = document.getElementById(tabId);
@@ -115,7 +150,9 @@ function filterTable(inputId, tableId) {
             const cell = document.createElement('td');
             cell.colSpan = colCount;
             cell.className = 'text-center text-muted no-result-cell';
-            cell.innerHTML = `Data untuk pencarian <strong>"${input.value}"</strong> tidak ditemukan.`;
+            const strong = document.createElement('strong');
+            strong.textContent = `"${input.value}"`;
+            cell.append('Data untuk pencarian ', strong, ' tidak ditemukan.');
             
             noResultRow.appendChild(cell);
             tbody.appendChild(noResultRow);
@@ -123,7 +160,10 @@ function filterTable(inputId, tableId) {
             const cell = noResultRow.querySelector('td');
             if (cell) {
                 cell.colSpan = colCount;
-                cell.innerHTML = `Data untuk pencarian <strong>"${input.value}"</strong> tidak ditemukan.`;
+                cell.replaceChildren();
+                const strong = document.createElement('strong');
+                strong.textContent = `"${input.value}"`;
+                cell.append('Data untuk pencarian ', strong, ' tidak ditemukan.');
             }
             noResultRow.classList.remove('hidden');
         }
@@ -152,10 +192,11 @@ function openReservationDetail(rowId, status, reasonText = "") {
     document.getElementById('detail-facility').textContent = data.facility;
     document.getElementById('detail-dates').textContent = data.dates;
     document.getElementById('detail-times').textContent = data.times;
+    document.getElementById('detail-submitted-at').textContent = data.submitted || '-';
     document.getElementById('detail-purpose').textContent = data.purpose;
     document.getElementById('detail-filename').textContent = data.filename;
     const fileLink = document.getElementById('detail-file-link');
-    if (fileLink) { fileLink.href = data.file_url || "#"; fileLink.classList.toggle('hidden', !data.file_url); }
+    if (fileLink) { fileLink.href = data.file_url ? `${API_BASE}${data.file_url}` : "#"; fileLink.classList.toggle('hidden', !data.file_url); }
 
     const reasonBox = document.getElementById('detail-reason-box');
     const reasonMsg = document.getElementById('detail-reason-text');
@@ -180,6 +221,26 @@ function openReservationDetail(rowId, status, reasonText = "") {
 
     modal.classList.remove('hidden');
 }
+
+document.getElementById('detail-file-link')?.addEventListener('click', async (event) => {
+    event.preventDefault();
+    const fileLink = event.currentTarget;
+    if (!(fileLink instanceof HTMLAnchorElement) || fileLink.classList.contains('hidden')) return;
+    if (fileLink.getAttribute('aria-busy') === 'true') return;
+
+    fileLink.setAttribute('aria-busy', 'true');
+    try {
+        await window.downloadProtectedFile(
+            fileLink.href,
+            document.getElementById('detail-filename')?.textContent || 'berkas'
+        );
+    } catch (error) {
+        console.error('Download reservation file error:', error);
+        alert(error instanceof Error ? error.message : 'Berkas tidak dapat diunduh.');
+    } finally {
+        fileLink.removeAttribute('aria-busy');
+    }
+});
 
 async function approveFromModal() {
     if (!currentReservationId) return;
@@ -313,6 +374,11 @@ function openDamageDetail(rowId, status) {
     document.getElementById('dmg-location').textContent = data.location;
     document.getElementById('dmg-description').textContent = data.description;
     document.getElementById('dmg-photo').textContent = data.photo;
+    const photoLink = document.getElementById('dmg-photo-download');
+    if (photoLink) {
+        photoLink.href = data.photo_url ? `${API_BASE}${data.photo_url}` : "#";
+        photoLink.classList.toggle('hidden', !data.photo_url);
+    }
 
     const resBox = document.getElementById('dmg-resolution-box');
     const resMsg = document.getElementById('dmg-resolution-text');
@@ -513,6 +579,9 @@ async function toggleMaintenance(rowId, facilityId) {
 
 // Load real data from Backend for Petugas
 async function loadPetugasData() {
+    setPetugasTableMessage("#table-maintenance tbody", "Memuat fasilitas...", 4);
+    setPetugasTableMessage("#table-queue tbody", "Memuat antrean reservasi...", 5);
+    setPetugasTableMessage("#table-damage tbody", "Memuat laporan kerusakan...", 5);
     try {
         // 1. Dashboard summary & stats (US 8)
         const dashRes = await fetch(`${API_BASE}/api/petugas/dashboard`, {
@@ -545,6 +614,9 @@ async function loadPetugasData() {
             const maintTable = document.querySelector("#table-maintenance tbody");
             if (maintTable && dashData.facilities) {
                 maintTable.innerHTML = "";
+                if (dashData.facilities.length === 0) {
+                    setPetugasTableMessage("#table-maintenance tbody", "Belum ada data fasilitas.", 4);
+                }
                 dashData.facilities.forEach((fac, idx) => {
                     const rowId = `row-ops-${fac.id}`;
                     const isMaint = ['maintenance', 'dalam perbaikan'].includes((fac.status || '').toLowerCase());
@@ -557,14 +629,19 @@ async function loadPetugasData() {
                     tr.id = rowId;
                     tr.dataset.facilityId = fac.id;
                     tr.innerHTML = `
-                        <td><div class="font-bold">${fac.name}</div></td>
-                        <td>${fac.location}</td>
+                        <td><div class="font-bold">${window.escapeHTML(fac.name)}</div></td>
+                        <td>${window.escapeHTML(fac.location)}</td>
                         <td><span class="${badgeClass}">${badgeText}</span></td>
-                        <td class="text-center"><button class="${btnClass}" onclick="toggleMaintenance('${rowId}', ${fac.id})">${btnText}</button></td>
+                        <td class="text-center">                        <button type="button" class="${btnClass}" onclick="toggleMaintenance('${rowId}', ${Number(fac.id)})">${btnText}</button></td>
                     `;
                     maintTable.appendChild(tr);
                 });
             }
+        } else {
+            document.querySelectorAll(".stats-grid .stat-card h3").forEach((element) => {
+                element.textContent = "Tidak tersedia";
+            });
+            setPetugasTableMessage("#table-maintenance tbody", "Gagal memuat fasilitas.", 4);
         }
 
         // 2. Queue Reservations + Damage Reports (US 8)
@@ -585,6 +662,9 @@ async function loadPetugasData() {
             reservationsMap = {};
             if (queueTable) {
                 queueTable.innerHTML = "";
+                if (queue.length === 0) {
+                    setPetugasTableMessage("#table-queue tbody", "Tidak ada pengajuan reservasi dalam antrean.", 5);
+                }
                 queue.forEach(res => {
                     reservationsMap[res.row_id] = res;
 
@@ -595,17 +675,17 @@ async function loadPetugasData() {
                     tr.id = res.row_id;
                     tr.innerHTML = `
                         <td>
-                            <div class="font-bold">${res.name}</div>
-                            <div class="text-accent">${res.role}</div>
+                            <div class="font-bold">${window.escapeHTML(res.name)}</div>
+                            <div class="text-accent">${window.escapeHTML(res.role)}</div>
                         </td>
-                        <td><div class="font-bold">${res.facility}</div></td>
+                        <td><div class="font-bold">${window.escapeHTML(res.facility)}</div></td>
                         <td>
-                            <div class="font-bold">${res.dates}</div>
-                            <div class="text-small text-muted">${res.times}</div>
+                            <div class="font-bold">${window.escapeHTML(res.dates)}</div>
+                            <div class="text-small text-muted">${window.escapeHTML(res.times)}</div>
                         </td>
-                        <td><span class="badge ${badgeClass}">${res.status}</span></td>
+                        <td><span class="badge ${badgeClass}">${window.escapeHTML(res.status)}</span></td>
                         <td class="text-center">
-                            <button class="${btnClass}" onclick="openReservationDetail('${res.row_id}', '${res.status}')">
+                            <button type="button" class="${btnClass}" onclick="openReservationDetail('${window.escapeHTML(res.row_id)}')">
                                 <span class="material-symbols-outlined icon-small">visibility</span> Detail
                             </button>
                         </td>
@@ -613,6 +693,8 @@ async function loadPetugasData() {
                     queueTable.appendChild(tr);
                 });
             }
+        } else {
+            setPetugasTableMessage("#table-queue tbody", "Gagal memuat antrean reservasi.", 5);
         }
 
         // 3. Damage Reports Table (US 8)
@@ -624,6 +706,9 @@ async function loadPetugasData() {
             damageReportsMap = {};
             if (dmgTable) {
                 dmgTable.innerHTML = "";
+                if (reports.length === 0) {
+                    setPetugasTableMessage("#table-damage tbody", "Belum ada laporan kerusakan.", 5);
+                }
                 reports.forEach(rep => {
                     damageReportsMap[rep.row_id] = rep;
 
@@ -634,14 +719,14 @@ async function loadPetugasData() {
                     tr.id = rep.row_id;
                     tr.innerHTML = `
                         <td>
-                            <div class="font-bold">${rep.facility}</div>
-                            <div class="text-small text-muted">Pelapor: ${rep.name}</div>
+                            <div class="font-bold">${window.escapeHTML(rep.facility)}</div>
+                            <div class="text-small text-muted">Pelapor: ${window.escapeHTML(rep.name)}</div>
                         </td>
-                        <td><span class="badge neutral">${rep.category}</span></td>
-                        <td>${rep.description.length > 40 ? rep.description.substring(0, 40) + '...' : rep.description}</td>
-                        <td><span class="badge ${badgeClass}">${rep.status}</span></td>
+                        <td><span class="badge neutral">${window.escapeHTML(rep.category)}</span></td>
+                        <td>${window.escapeHTML(rep.description.length > 40 ? rep.description.substring(0, 40) + '...' : rep.description)}</td>
+                        <td><span class="badge ${badgeClass}">${window.escapeHTML(rep.status)}</span></td>
                         <td class="text-center">
-                            <button class="${btnClass}" onclick="openDamageDetail('${rep.row_id}', '${rep.status}')">
+                            <button type="button" class="${btnClass}" onclick="openDamageDetail('${window.escapeHTML(rep.row_id)}')">
                                 <span class="material-symbols-outlined icon-small">visibility</span> Detail
                             </button>
                         </td>
@@ -649,9 +734,17 @@ async function loadPetugasData() {
                     dmgTable.appendChild(tr);
                 });
             }
+        } else {
+            setPetugasTableMessage("#table-damage tbody", "Gagal memuat laporan kerusakan.", 5);
         }
     } catch (e) {
         console.error("Petugas data load error:", e);
+        document.querySelectorAll(".stats-grid .stat-card h3").forEach((element) => {
+            if (element.textContent === "Memuat...") element.textContent = "Tidak tersedia";
+        });
+        setPetugasTableMessage("#table-maintenance tbody", "Tidak dapat memuat fasilitas. Coba muat ulang halaman.", 4, true);
+        setPetugasTableMessage("#table-queue tbody", "Tidak dapat memuat antrean. Coba muat ulang halaman.", 5, true);
+        setPetugasTableMessage("#table-damage tbody", "Tidak dapat memuat laporan. Coba muat ulang halaman.", 5, true);
     }
 }
 
@@ -664,3 +757,13 @@ function matchBadge(status) {
 }
 
 loadPetugasData();
+
+[
+    ['approveFromModal', 'Menyetujui...'],
+    ['confirmReject', 'Menolak...'],
+    ['confirmEmergency', 'Membatalkan...'],
+    ['processDamageFromModal', 'Memproses...'],
+    ['confirmResolution', 'Menyimpan...'],
+    ['confirmDamageReject', 'Menolak...'],
+    ['toggleMaintenance', 'Memperbarui...']
+].forEach(([name, label]) => window.wrapButtonAction(name, label));
