@@ -1,8 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="assets/images/diserve-logo.png">
     <title>Ajukan Reservasi - DiServe</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,7 +16,7 @@
     <header class="reservation-navbar">
         <a href="dashboard.html" class="reservation-brand">
             <div class="reservation-logo">
-                <img src="assets/images/logo-patung-kuda-undip.png" alt="Logo UNDIP">
+                <img src="assets/images/diserve-logo.png" alt="Logo DiServe">
             </div>
             <div class="reservation-brand-text">
                 <h1>DiServe</h1>
@@ -86,32 +87,6 @@
                             <label for="start-time">Jam mulai <span class="required-mark">*</span></label>
                             <select id="start-time" name="start_time" required>
                                 <option value="">Pilih jam mulai</option>
-                                <option value="07:00">07:00</option>
-                                <option value="07:30">07:30</option>
-                                <option value="08:00">08:00</option>
-                                <option value="08:30">08:30</option>
-                                <option value="09:00">09:00</option>
-                                <option value="09:30">09:30</option>
-                                <option value="10:00">10:00</option>
-                                <option value="10:30">10:30</option>
-                                <option value="11:00">11:00</option>
-                                <option value="11:30">11:30</option>
-                                <option value="12:00">12:00</option>
-                                <option value="12:30">12:30</option>
-                                <option value="13:00">13:00</option>
-                                <option value="13:30">13:30</option>
-                                <option value="14:00">14:00</option>
-                                <option value="14:30">14:30</option>
-                                <option value="15:00">15:00</option>
-                                <option value="15:30">15:30</option>
-                                <option value="16:00">16:00</option>
-                                <option value="16:30">16:30</option>
-                                <option value="17:00">17:00</option>
-                                <option value="17:30">17:30</option>
-                                <option value="18:00">18:00</option>
-                                <option value="18:30">18:30</option>
-                                <option value="19:00">19:00</option>
-                                <option value="19:30">19:30</option>
                             </select>
                         </div>
 
@@ -119,38 +94,11 @@
                             <label for="end-time">Jam selesai <span class="required-mark">*</span></label>
                             <select id="end-time" name="end_time" required>
                                 <option value="">Pilih jam selesai</option>
-                                <option value="07:00">07:00</option>
-                                <option value="07:30">07:30</option>
-                                <option value="08:00">08:00</option>
-                                <option value="08:30">08:30</option>
-                                <option value="09:00">09:00</option>
-                                <option value="09:30">09:30</option>
-                                <option value="10:00">10:00</option>
-                                <option value="10:30">10:30</option>
-                                <option value="11:00">11:00</option>
-                                <option value="11:30">11:30</option>
-                                <option value="12:00">12:00</option>
-                                <option value="12:30">12:30</option>
-                                <option value="13:00">13:00</option>
-                                <option value="13:30">13:30</option>
-                                <option value="14:00">14:00</option>
-                                <option value="14:30">14:30</option>
-                                <option value="15:00">15:00</option>
-                                <option value="15:30">15:30</option>
-                                <option value="16:00">16:00</option>
-                                <option value="16:30">16:30</option>
-                                <option value="17:00">17:00</option>
-                                <option value="17:30">17:30</option>
-                                <option value="18:00">18:00</option>
-                                <option value="18:30">18:30</option>
-                                <option value="19:00">19:00</option>
-                                <option value="19:30">19:30</option>
-                                <option value="20:00">20:00</option>
                             </select>
                         </div>
                     </div>
 
-                    <p class="reservation-helper">Jam penggunaan mengikuti waktu operasional fasilitas</p>
+                    <p class="reservation-helper">Pengajuan dapat dikirim pukul 07.00â€“20.00 WIB. Waktu penggunaan tersedia pukul 06.00â€“23.00 WIB.</p>
                 </div>
 
                 <div class="reservation-divider"></div>
@@ -236,8 +184,12 @@
                     </div>
 
                     <div class="reservation-success-item">
-                        <span>Waktu</span>
+                        <span>Waktu penggunaan</span>
                         <strong id="success-reservation-time"></strong>
+                    </div>
+                    <div class="reservation-success-item">
+                        <span>Waktu pengajuan</span>
+                        <strong id="success-reservation-submitted"></strong>
                     </div>
 
                     <div class="reservation-success-item">
@@ -263,6 +215,8 @@
         </div>
     </div>
 
+    <script src="assets/js/business-rules.js"></script>
+    <script src="assets/js/action-state.js"></script>
     <script src="assets/js/reservation.js"></script>
 </body>
 </html>

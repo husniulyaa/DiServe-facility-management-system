@@ -23,12 +23,29 @@ const successCloseButton = document.querySelector("#reservation-success-close-bu
 const successFacility = document.querySelector("#success-reservation-facility");
 const successDate = document.querySelector("#success-reservation-date");
 const successTime = document.querySelector("#success-reservation-time");
+const successSubmitted = document.querySelector("#success-reservation-submitted");
 const successPurpose = document.querySelector("#success-reservation-purpose");
 const successFile = document.querySelector("#success-reservation-file");
 
 const tomorrowDate = new Date();
 tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-const tomorrow = tomorrowDate.toISOString().split("T")[0];
+const tomorrow = window.DiServeBusinessRules.localDate(tomorrowDate);
+
+function populateTimeOptions(select, startMinutes, endMinutes) {
+    if (!select) return;
+
+    const placeholder = select.options[0]?.textContent || "Pilih jam";
+    select.replaceChildren(new Option(placeholder, ""));
+    for (let minutes = startMinutes; minutes <= endMinutes; minutes += 30) {
+        const hour = String(Math.floor(minutes / 60)).padStart(2, "0");
+        const minute = String(minutes % 60).padStart(2, "0");
+        const value = `${hour}:${minute}`;
+        select.add(new Option(value, value));
+    }
+}
+
+populateTimeOptions(startTimeInput, 6 * 60, 22 * 60 + 30);
+populateTimeOptions(endTimeInput, 6 * 60, 23 * 60);
 
 if (startDateInput && endDateInput) {
     startDateInput.min = tomorrow;
@@ -55,6 +72,7 @@ function showSuccessOverlay(reservation) {
     successFacility.textContent = reservation.facility;
     successDate.textContent = reservation.date;
     successTime.textContent = reservation.time;
+    if (successSubmitted) successSubmitted.textContent = reservation.submitted;
     successPurpose.textContent = reservation.purpose;
     successFile.textContent = reservation.file;
 
@@ -70,6 +88,11 @@ function closeSuccessOverlay() {
 
 reservationForm.addEventListener("submit", async function (event) {
     event.preventDefault();
+
+    if (!window.DiServeBusinessRules.isSubmissionWindowOpen()) {
+        alert("Pengajuan reservasi hanya dapat dikirim pukul 07.00–20.00 WIB.");
+        return;
+    }
     
     const facilitySelect = facilityInput;
     const selectedOption = facilitySelect.options[facilitySelect.selectedIndex];
@@ -88,8 +111,9 @@ reservationForm.addEventListener("submit", async function (event) {
         return;
     }
     const toMinutes = value => Number(value.split(":")[0]) * 60 + Number(value.split(":")[1]);
-    if (toMinutes(startTime) < 420 || toMinutes(startTime) >= 1200 || toMinutes(endTime) < 420 || toMinutes(endTime) > 1200) {
-        alert("Reservasi hanya dapat dilakukan pada pukul 07:00 sampai 20:00.");
+    if (toMinutes(startTime) < 360 || toMinutes(startTime) >= 1380 || toMinutes(endTime) < 360 || toMinutes(endTime) > 1380
+        || toMinutes(startTime) % 30 !== 0 || toMinutes(endTime) % 30 !== 0) {
+        alert("Waktu pemakaian harus menggunakan slot 30 menit antara pukul 06.00 dan 23.00 WIB.");
         return;
     }
     if (endDate < startDate) {
@@ -106,9 +130,11 @@ reservationForm.addEventListener("submit", async function (event) {
     }
 
     const submitBtn = reservationForm.querySelector("button[type='submit']");
-    if (submitBtn) {
+    if (submitBtn && !submitBtn.disabled) {
         submitBtn.disabled = true;
         submitBtn.textContent = "Mengirim...";
+    } else if (submitBtn) {
+        return;
     }
 
     try {
@@ -146,6 +172,7 @@ reservationForm.addEventListener("submit", async function (event) {
             endDate: endDate,
             date: startDate === endDate ? formatDate(startDate) : formatDate(startDate) + " - " + formatDate(endDate),
             time: startTime + " - " + endTime,
+            submitted: data.reservation.submitted || "-",
             purpose: purpose,
             file: supportingFile ? supportingFile.name : "Tidak ada berkas",
             status: "Menunggu",
@@ -180,25 +207,31 @@ document.addEventListener("keydown", function (event) {
 
 async function loadFacilityOptions() {
     if (!facilityInput) return;
+    const placeholder = new Option("Memuat fasilitas...", "");
+    placeholder.disabled = true;
+    facilityInput.replaceChildren(placeholder);
     try {
         const res = await fetch(`${API_BASE}/api/facilities`);
-        if (res.ok) {
-            const data = await res.json();
-            const facilities = data.data || [];
-            if (facilities.length > 0) {
-                const currentVal = facilityInput.value;
-                facilityInput.innerHTML = '<option value="">Pilih fasilitas</option>';
-                facilities.forEach(f => {
-                    const opt = document.createElement("option");
-                    opt.value = f.slug || f.id;
-                    opt.textContent = f.name;
-                    facilityInput.appendChild(opt);
-                });
-                if (currentVal) facilityInput.value = currentVal;
-            }
+        if (!res.ok) throw new Error(`Facility request failed (${res.status})`);
+
+        const data = await res.json();
+        const facilities = data.data || [];
+        facilityInput.replaceChildren(new Option(
+            facilities.length ? "Pilih fasilitas" : "Belum ada fasilitas tersedia",
+            ""
+        ));
+        facilities.forEach(f => {
+            const opt = new Option(f.name, String(f.id));
+            facilityInput.appendChild(opt);
+        });
+        if (facilities.length === 0) {
+            facilityInput.options[0].disabled = true;
         }
-    } catch (e) {
-        console.error("Load facility options error:", e);
+    } catch (error) {
+        console.error("Load facility options error:", error);
+        const failedOption = new Option("Gagal memuat fasilitas. Muat ulang halaman.", "");
+        failedOption.disabled = true;
+        facilityInput.replaceChildren(failedOption);
     }
 }
 
