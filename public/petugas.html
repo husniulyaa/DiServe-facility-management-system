@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="assets/images/diserve-logo.png">
   <title>Dashboard Petugas - DiServe</title>
   
   <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -19,8 +20,8 @@
     <aside class="sidebar">
       <div class="sidebar-header">
             <img
-          src="assets/images/logo-patung-kuda-undip.png"
-          alt="Logo Universitas Diponegoro"
+          src="assets/images/diserve-logo.png"
+          alt="Logo DiServe"
           class="sidebar-logo"
         />
         <div>
@@ -37,7 +38,7 @@
             <span class="material-symbols-outlined">data_check</span>
             <span>Antrean Pengajuan</span>
           </div>
-          <span class="badge warning" id="badge-queue-count">1</span>
+          <span class="badge warning" id="badge-queue-count">...</span>
         </div>
         
         <div class="navigation-item" id="nav-btn-damage" onclick="switchTab('tab-damage')">
@@ -76,28 +77,28 @@
         <div class="stat-card">
           <div>
             <p class="stat-label">Antrean Menunggu</p>
-            <h3 class="stat-value font-bold" id="stat-pending">1</h3>
+            <h3 class="stat-value font-bold" id="stat-pending">Memuat...</h3>
           </div>
           <div class="stat-icon warning"><span class="material-symbols-outlined">outbox</span></div>
         </div>
         <div class="stat-card">
           <div>
             <p class="stat-label">Laporan Baru</p>
-            <h3 class="stat-value font-bold">1</h3>
+            <h3 class="stat-value font-bold">Memuat...</h3>
           </div>
           <div class="stat-icon danger"><span class="material-symbols-outlined">report</span></div>
         </div>
         <div class="stat-card">
           <div>
             <p class="stat-label">Sedang Diproses</p>
-            <h3 class="stat-value font-bold">1</h3>
+            <h3 class="stat-value font-bold">Memuat...</h3>
           </div>
           <div class="stat-icon primary"><span class="material-symbols-outlined">pending_actions</span></div>
         </div>
         <div class="stat-card">
           <div>
             <p class="stat-label">Dalam Perbaikan</p>
-            <h3 class="stat-value font-bold">1</h3>
+            <h3 class="stat-value font-bold">Memuat...</h3>
           </div>
           <div class="stat-icon neutral"><span class="material-symbols-outlined">construction</span></div>
         </div>
@@ -129,7 +130,7 @@
                 <th class="text-center">Aksi</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody hidden>
               <tr id="row-queue-1">
                 <td>
                   <div class="font-bold">Husni Ulyaa Khanifah</div>
@@ -237,7 +238,7 @@
                 <th class="text-center">Tindakan</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody hidden>
               <tr id="row-damage-1">
                 <td>
                   <div class="font-bold">Laboratorium Sentral FK</div>
@@ -324,7 +325,7 @@
                 <th class="text-center">Ubah Status</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody hidden>
               <tr id="row-ops-1">
                 <td><div class="font-bold">Muladi Dome</div></td>
                 <td>Lainnya</td>
@@ -418,6 +419,10 @@
               <span class="detail-label">Jam Operasional</span>
               <div class="detail-value font-bold" id="detail-times">08:00 WIB - 11:30 WIB</div>
             </div>
+            <div>
+              <span class="detail-label">Waktu Pengajuan</span>
+              <div class="detail-value font-bold" id="detail-submitted-at">-</div>
+            </div>
             <div class="grid-full">
               <span class="detail-label">Tujuan Kegiatan</span>
               <div class="detail-value font-bold" id="detail-purpose">Pelatihan UI/UX Design Himpunan Mahasiswa Informatika</div>
@@ -481,7 +486,7 @@
           <div class="evidence-box">
             <span class="material-symbols-outlined evidence-icon">image</span>
             <span class="text-small font-bold text-muted" id="dmg-photo">foto_kerusakan_listrik.jpg</span>
-            <button class="button button-outline button-small button-align-right">Lihat Foto</button>
+            <a id="dmg-photo-download" class="button button-outline button-small button-align-right hidden" href="#">Unduh Foto</a>
           </div>
         </div>
 
@@ -564,6 +569,7 @@
       </div>
     </div>
   </div>
+  <script src="assets/js/action-state.js"></script>
   <script src="assets/js/petugas.js"></script>
 </body>
 </html>

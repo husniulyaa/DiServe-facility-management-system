@@ -19,6 +19,7 @@ const detailTime = document.querySelector("#detail-time");
 const detailPurpose = document.querySelector("#detail-purpose");
 const detailStatus = document.querySelector("#detail-status");
 const detailFile = document.querySelector("#detail-file");
+const detailFileDownload = document.querySelector("#detail-file-download");
 const detailSubmitted = document.querySelector("#detail-submitted");
 const detailCancellationDeadline = document.querySelector("#detail-cancellation-deadline");
 
@@ -38,7 +39,8 @@ if (storedUser && storedUser.name) {
     });
 }
 
-logoutButton.addEventListener("click", async function () {
+logoutButton?.addEventListener("click", async function (event) {
+    window.beginButtonAction(event.currentTarget, "Keluar...");
     try {
         await fetch(`${API_BASE}/api/auth/logout`, {
             method: "POST",
@@ -50,9 +52,10 @@ logoutButton.addEventListener("click", async function () {
     } catch (e) {
         console.error("Logout error:", e);
     } finally {
+        const sessionExpired = !localStorage.getItem("auth_token");
         localStorage.removeItem("auth_token");
         localStorage.removeItem("user");
-        window.location.href = "index.html";
+        window.location.href = sessionExpired ? "login.html" : "index.html";
     }
 });
 
@@ -67,6 +70,7 @@ function openReservationDetail(button) {
     const status = button.dataset.status;
     const statusClass = button.dataset.statusClass;
     const file = button.dataset.file;
+    const fileUrl = button.dataset.fileUrl;
     const submitted = button.dataset.submitted;
     const cancellationDeadline = button.dataset.cancellationDeadline;
 
@@ -77,6 +81,10 @@ function openReservationDetail(button) {
     detailPurpose.textContent = purpose;
     detailStatus.textContent = status;
     detailFile.textContent = file;
+    if (detailFileDownload) {
+        detailFileDownload.href = fileUrl ? `${API_BASE}${fileUrl}` : "#";
+        detailFileDownload.classList.toggle("hidden", !fileUrl);
+    }
     detailSubmitted.textContent = submitted;
     detailCancellationDeadline.textContent = cancellationDeadline ? formatDateTime(cancellationDeadline) : "-";
 
@@ -205,13 +213,35 @@ function formatDateTime(dateTime) {
     });
 }
 
-reservationCancelButton.addEventListener("click", cancelReservation);
-reservationDetailClose.addEventListener("click", closeReservationDetail);
-reservationDetailCancel.addEventListener("click", closeReservationDetail);
+reservationCancelButton?.addEventListener("click", async (event) => {
+    const restore = window.beginButtonAction(event.currentTarget, "Membatalkan...");
+    if (!restore) return;
+    try {
+        await cancelReservation();
+    } finally {
+        restore();
+    }
+});
+reservationDetailClose?.addEventListener("click", closeReservationDetail);
+reservationDetailCancel?.addEventListener("click", closeReservationDetail);
 
-reservationDetailOverlay.addEventListener("click", function (event) {
+reservationDetailOverlay?.addEventListener("click", function (event) {
     if (event.target === reservationDetailOverlay) {
         closeReservationDetail();
+    }
+});
+
+detailFileDownload?.addEventListener("click", async (event) => {
+    event.preventDefault();
+    if (detailFileDownload.getAttribute("aria-busy") === "true") return;
+    detailFileDownload.setAttribute("aria-busy", "true");
+    try {
+        await window.downloadProtectedFile(detailFileDownload.href, detailFile.textContent);
+    } catch (error) {
+        console.error("Download reservation file error:", error);
+        alert(error instanceof Error ? error.message : "Berkas tidak dapat diunduh.");
+    } finally {
+        detailFileDownload.removeAttribute("aria-busy");
     }
 });
 
@@ -228,6 +258,7 @@ const reportDetailDate = document.querySelector("#report-detail-date");
 const reportDetailStatus = document.querySelector("#report-detail-status");
 const reportDetailDescription = document.querySelector("#report-detail-description");
 const reportDetailPhoto = document.querySelector("#report-detail-photo");
+const reportDetailPhotoDownload = document.querySelector("#report-detail-photo-download");
 const reportDetailNote = document.querySelector("#report-detail-note");
 
 const reportTableBody = document.querySelector("#report-table-body");
@@ -242,20 +273,26 @@ function openReportDetail(button) {
     const category = button.dataset.category;
     const location = button.dataset.location;
     const date = button.dataset.date;
+    const submitted = button.dataset.submitted;
     const status = button.dataset.status;
     const statusClass = button.dataset.statusClass;
     const description = button.dataset.description;
     const photo = button.dataset.photo;
+    const photoUrl = button.dataset.photoUrl;
     const note = button.dataset.note;
 
     reportDetailFacility.textContent = facility;
     reportDetailFacilityName.textContent = facility;
     reportDetailCategory.textContent = category;
     reportDetailLocation.textContent = location;
-    reportDetailDate.textContent = date;
+    reportDetailDate.textContent = submitted || date;
     reportDetailStatus.textContent = status;
     reportDetailDescription.textContent = description;
     reportDetailPhoto.textContent = photo;
+    if (reportDetailPhotoDownload) {
+        reportDetailPhotoDownload.href = photoUrl ? `${API_BASE}${photoUrl}` : "#";
+        reportDetailPhotoDownload.classList.toggle("hidden", !photoUrl);
+    }
     reportDetailNote.textContent = note;
 
     reportDetailStatus.className = "report-status " + statusClass;
@@ -279,6 +316,19 @@ document.addEventListener("click", function (event) {
 
 reportDetailClose.addEventListener("click", closeReportDetail);
 reportDetailCancel.addEventListener("click", closeReportDetail);
+reportDetailPhotoDownload?.addEventListener("click", async (event) => {
+    event.preventDefault();
+    if (reportDetailPhotoDownload.getAttribute("aria-busy") === "true") return;
+    reportDetailPhotoDownload.setAttribute("aria-busy", "true");
+    try {
+        await window.downloadProtectedFile(reportDetailPhotoDownload.href, reportDetailPhoto.textContent);
+    } catch (error) {
+        console.error("Download report photo error:", error);
+        alert(error instanceof Error ? error.message : "Foto tidak dapat diunduh.");
+    } finally {
+        reportDetailPhotoDownload.removeAttribute("aria-busy");
+    }
+});
 
 reportDetailOverlay.addEventListener("click", function (event) {
     if (event.target === reportDetailOverlay) {
@@ -293,137 +343,217 @@ document.addEventListener("keydown", function (event) {
     }
 });
 
-// Load real data from Backend
+let dashboardLoadId = 0;
+let dashboardController = null;
+
+function setTableState(tableBody, message, colspan, retry = false) {
+    if (!tableBody) return;
+
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = colspan;
+    cell.textContent = message;
+    row.appendChild(cell);
+
+    if (retry) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "dashboard-table-action";
+        button.textContent = "Coba lagi";
+        button.addEventListener("click", loadDashboardData);
+        cell.append(" ", button);
+    }
+
+    tableBody.replaceChildren(row);
+}
+
+function makeCell(value, strong = false) {
+    const cell = document.createElement("td");
+    const content = strong ? document.createElement("strong") : cell;
+    content.textContent = value ?? "-";
+    if (strong) cell.appendChild(content);
+    return cell;
+}
+
+async function fetchDashboardList(path, signal) {
+    const response = await fetch(`${API_BASE}${path}`, {
+        headers: {
+            "Authorization": `Bearer ${token}`,
+            "Accept": "application/json"
+        },
+        signal
+    });
+    if (!response.ok) {
+        const error = new Error(`Dashboard request failed (${response.status})`);
+        error.status = response.status;
+        throw error;
+    }
+
+    const data = await response.json();
+    return Array.isArray(data.data) ? data.data : [];
+}
+
+function updateCount(selector, value) {
+    const element = document.querySelector(selector);
+    if (element) element.textContent = String(value);
+}
+
+function renderReservations(reservations) {
+    if (!reservationTableBody) return;
+    if (reservations.length === 0) {
+        setTableState(reservationTableBody, "Belum ada pengajuan reservasi.", 6);
+        return;
+    }
+
+    const rows = reservations.slice(0, 5).map((reservation) => {
+        const row = document.createElement("tr");
+        row.append(
+            makeCell(reservation.facility, true),
+            makeCell(reservation.date),
+            makeCell(reservation.time),
+            makeCell(reservation.purpose)
+        );
+
+        const statusCell = document.createElement("td");
+        const status = document.createElement("span");
+        const allowedStatus = ["pending", "approved", "rejected", "cancelled"];
+        const statusClass = allowedStatus.includes(reservation.status_class) ? reservation.status_class : "cancelled";
+        status.className = `dashboard-status ${statusClass}`;
+        status.textContent = reservation.status || "Status tidak diketahui";
+        statusCell.appendChild(status);
+        row.appendChild(statusCell);
+
+        const actionCell = document.createElement("td");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "dashboard-table-action reservation-detail-button";
+        Object.assign(button.dataset, {
+            id: reservation.id,
+            facility: reservation.facility || "-",
+            date: reservation.date || "-",
+            time: reservation.time || "-",
+            purpose: reservation.purpose || "-",
+            status: reservation.status || "-",
+            statusClass,
+            file: reservation.file || "-",
+            fileUrl: reservation.file_url || "",
+            submitted: reservation.submitted || "-",
+            cancellationDeadline: reservation.cancellation_deadline || ""
+        });
+        button.textContent = "Lihat";
+        button.addEventListener("click", () => openReservationDetail(button));
+        actionCell.appendChild(button);
+        row.appendChild(actionCell);
+        return row;
+    });
+
+    reservationTableBody.replaceChildren(...rows);
+}
+
+function renderReports(reports) {
+    if (!reportTableBody) return;
+    if (reports.length === 0) {
+        setTableState(reportTableBody, "Belum ada laporan fasilitas.", 5);
+        return;
+    }
+
+    const rows = reports.map((report) => {
+        const row = document.createElement("tr");
+        row.append(
+            makeCell(report.facility),
+            makeCell(report.category),
+            makeCell(report.date)
+        );
+
+        const statusCell = document.createElement("td");
+        const status = document.createElement("span");
+        const allowedStatus = ["new", "processing", "completed", "rejected"];
+        const statusClass = allowedStatus.includes(report.statusClass) ? report.statusClass : "rejected";
+        status.className = `report-status ${statusClass}`;
+        status.textContent = report.status || "Status tidak diketahui";
+        statusCell.appendChild(status);
+        row.appendChild(statusCell);
+
+        const actionCell = document.createElement("td");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "dashboard-table-action report-detail-button";
+        Object.assign(button.dataset, {
+            facility: report.facility || "-",
+            category: report.category || "-",
+            location: report.location || "-",
+            date: report.date || "-",
+            status: report.status || "-",
+            statusClass,
+            description: report.description || "-",
+            photo: report.photo || "-",
+            photoUrl: report.photo_url || "",
+            note: report.note || "-",
+            submitted: report.submitted || "-"
+        });
+        button.textContent = "Lihat";
+        actionCell.appendChild(button);
+        row.appendChild(actionCell);
+        return row;
+    });
+
+    reportTableBody.replaceChildren(...rows);
+}
+
 async function loadDashboardData() {
-    try {
-        // 1. Fetch User Reservations (US 5)
-        const resResponse = await fetch(`${API_BASE}/api/user/reservations`, {
-            headers: {
-                "Authorization": `Bearer ${token}`,
-                "Accept": "application/json"
-            }
-        });
+    const loadId = ++dashboardLoadId;
+    dashboardController?.abort();
+    dashboardController = new AbortController();
+    const { signal } = dashboardController;
 
-        if (resResponse.ok) {
-            const resData = await resResponse.json();
-            const reservations = resData.data || [];
+    setTableState(reservationTableBody, "Memuat reservasi...", 6);
+    setTableState(reportTableBody, "Memuat laporan...", 5);
+    document.querySelectorAll("[data-dashboard-stat], [data-report-stat]").forEach((element) => {
+        element.textContent = "—";
+    });
 
-            if (reservationTableBody) {
-                reservationTableBody.innerHTML = "";
-                reservations.slice(0, 5).forEach(res => {
-                    const row = document.createElement("tr");
-                    row.innerHTML = `
-                        <td><strong>${res.facility}</strong></td>
-                        <td>${res.date}</td>
-                        <td>${res.time}</td>
-                        <td>${res.purpose}</td>
-                        <td>
-                            <span class="dashboard-status ${res.status_class}">${res.status}</span>
-                        </td>
-                        <td>
-                            <button
-                                type="button"
-                                class="dashboard-table-action reservation-detail-button"
-                                data-id="${res.id}"
-                                data-facility="${res.facility}"
-                                data-date="${res.date}"
-                                data-time="${res.time}"
-                                data-purpose="${res.purpose}"
-                                data-status="${res.status}"
-                                data-status-class="${res.status_class}"
-                                data-file="${res.file}"
-                                data-submitted="${res.submitted}"
-                                data-cancellation-deadline="${res.cancellation_deadline || ''}"
-                            >
-                                Lihat
-                            </button>
-                        </td>
-                    `;
-                    reservationTableBody.appendChild(row);
-                });
+    const results = await Promise.allSettled([
+        fetchDashboardList("/api/user/reservations", signal),
+        fetchDashboardList("/api/user/reports", signal)
+    ]);
+    if (loadId !== dashboardLoadId) return;
 
-                // Attach click handlers to reservation detail buttons
-                reservationTableBody.querySelectorAll(".reservation-detail-button").forEach(btn => {
-                    btn.addEventListener("click", () => openReservationDetail(btn));
-                });
-            }
+    const [reservationResult, reportResult] = results;
+    if (reservationResult.status === "fulfilled") {
+        const reservations = reservationResult.value;
+        renderReservations(reservations);
+        updateCount('[data-dashboard-stat="reservations"]', reservations.length);
+        updateCount('[data-dashboard-stat="pending"]', reservations.filter((item) => item.status_class === "pending").length);
+        updateCount('[data-dashboard-stat="approved"]', reservations.filter((item) => item.status_class === "approved").length);
+    } else if (reservationResult.reason?.name !== "AbortError") {
+        console.error("Dashboard reservations load error:", reservationResult.reason);
+        const message = reservationResult.reason?.status === 401
+            ? "Sesi login berakhir. Silakan masuk kembali."
+            : "Reservasi gagal dimuat.";
+        setTableState(reservationTableBody, message, 6, true);
+        ["reservations", "pending", "approved"].forEach((name) => updateCount(`[data-dashboard-stat="${name}"]`, "—"));
+    }
 
-            // Update top stats cards
-            const totalResCount = reservations.length;
-            const pendingCount = reservations.filter(r => r.status_class === "pending").length;
-            const approvedCount = reservations.filter(r => r.status_class === "approved").length;
-
-            const statCards = document.querySelectorAll(".dashboard-stat-card");
-            if (statCards.length >= 3) {
-                statCards[0].querySelector("strong").textContent = totalResCount;
-                statCards[1].querySelector("strong").textContent = pendingCount;
-                statCards[2].querySelector("strong").textContent = approvedCount;
-            }
-        }
-
-        // 2. Fetch User Damage Reports (US 7)
-        const repResponse = await fetch(`${API_BASE}/api/user/reports`, {
-            headers: {
-                "Authorization": `Bearer ${token}`,
-                "Accept": "application/json"
-            }
-        });
-
-        if (repResponse.ok) {
-            const repData = await repResponse.json();
-            const reports = repData.data || [];
-
-            if (reportTableBody) {
-                reportTableBody.innerHTML = "";
-                reports.forEach(report => {
-                    const row = document.createElement("tr");
-                    row.innerHTML = `
-                        <td>${report.facility}</td>
-                        <td>${report.category}</td>
-                        <td>${report.date}</td>
-                        <td>
-                            <span class="report-status ${report.statusClass}">
-                                ${report.status}
-                            </span>
-                        </td>
-                        <td>
-                            <button
-                                type="button"
-                                class="report-detail-button"
-                                data-facility="${report.facility}"
-                                data-category="${report.category}"
-                                data-location="${report.location}"
-                                data-date="${report.date}"
-                                data-status="${report.status}"
-                                data-status-class="${report.statusClass}"
-                                data-description="${report.description}"
-                                data-photo="${report.photo}"
-                                data-note="${report.note}"
-                            >
-                                Lihat
-                            </button>
-                        </td>
-                    `;
-                    reportTableBody.appendChild(row);
-                });
-            }
-
-            // Update report count in stat card #4
-            const statCards = document.querySelectorAll(".dashboard-stat-card");
-            if (statCards.length >= 4) {
-                const activeReports = reports.filter(r => r.statusClass === "new" || r.statusClass === "processing").length;
-                statCards[3].querySelector("strong").textContent = activeReports;
-            }
-
-            // Update report stats overview
-            if (reportTotal) reportTotal.textContent = reports.length;
-            if (reportNew) reportNew.textContent = reports.filter(r => r.statusClass === "new").length;
-            if (reportProcessing) reportProcessing.textContent = reports.filter(r => r.statusClass === "processing").length;
-            if (reportCompleted) reportCompleted.textContent = reports.filter(r => r.statusClass === "completed").length;
-            if (reportRejected) reportRejected.textContent = reports.filter(r => r.statusClass === "rejected").length;
-        }
-    } catch (err) {
-        console.error("Dashboard data load error:", err);
+    if (reportResult.status === "fulfilled") {
+        const reports = reportResult.value;
+        renderReports(reports);
+        const counts = {
+            total: reports.length,
+            new: reports.filter((item) => item.statusClass === "new").length,
+            processing: reports.filter((item) => item.statusClass === "processing").length,
+            completed: reports.filter((item) => item.statusClass === "completed").length,
+            rejected: reports.filter((item) => item.statusClass === "rejected").length
+        };
+        Object.entries(counts).forEach(([status, count]) => updateCount(`[data-report-stat="${status}"]`, count));
+        updateCount('[data-dashboard-stat="active-reports"]', counts.new + counts.processing);
+    } else if (reportResult.reason?.name !== "AbortError") {
+        console.error("Dashboard reports load error:", reportResult.reason);
+        const message = reportResult.reason?.status === 401
+            ? "Sesi login berakhir. Silakan masuk kembali."
+            : "Laporan gagal dimuat.";
+        setTableState(reportTableBody, message, 5, true);
+        ["total", "new", "processing", "completed", "rejected"].forEach((name) => updateCount(`[data-report-stat="${name}"]`, "—"));
+        updateCount('[data-dashboard-stat="active-reports"]', "—");
     }
 }
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\DamageReport;
 use App\Models\Facility;
+use App\Support\SubmissionWindow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -46,11 +47,12 @@ class DamageReportController extends Controller
                 'category' => $rep->category,
                 'location' => $rep->location_detail,
                 'date' => $rep->created_at ? $rep->created_at->translatedFormat('d M Y') : '-',
+                'submitted' => $rep->created_at ? $rep->created_at->translatedFormat('d F Y, H:i') . ' WIB' : '-',
                 'status' => $statusLabel,
                 'statusClass' => $statusClass,
                 'description' => $rep->description,
                 'photo' => $rep->photo ? basename($rep->photo) : 'Tidak ada foto',
-                'photo_url' => $rep->photo ? Storage::url($rep->photo) : null,
+                'photo_url' => $rep->photo ? "/api/reports/{$rep->id}/photo" : null,
                 'note' => $rep->resolution_note ?: ($rep->status === 'baru' ? 'Laporan telah diterima dan menunggu pemeriksaan petugas.' : ($rep->status === 'diproses' ? 'Petugas sedang melakukan pengecekan perangkat.' : ($rep->reject_reason ?: '-'))),
             ];
         });
@@ -66,6 +68,13 @@ class DamageReportController extends Controller
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
+
+        if (!SubmissionWindow::isOpen()) {
+            return response()->json([
+                'message' => 'Pengajuan laporan hanya dapat dikirim pukul 07.00–20.00 WIB.',
+                'errors' => ['submission_time' => ['Waktu pengajuan berada di luar jam layanan.']],
+            ], 422);
+        }
 
         if (!$request->has('facility') && $request->has('facility_id')) {
             $request->merge(['facility' => $request->facility_id]);
@@ -113,7 +122,7 @@ class DamageReportController extends Controller
 
         $photoPath = null;
         if ($request->hasFile('photo')) {
-            $photoPath = $request->file('photo')->store('reports', 'public');
+            $photoPath = $request->file('photo')->store('reports', 'local');
         }
 
         $category = collect(DamageReport::CATEGORIES)
@@ -137,12 +146,32 @@ class DamageReportController extends Controller
                 'category' => $report->category,
                 'location' => $report->location_detail,
                 'date' => $report->created_at->translatedFormat('d F Y'),
+                'submitted' => $report->created_at->translatedFormat('d F Y, H:i') . ' WIB',
                 'description' => $report->description,
                 'photo' => $photoPath ? basename($photoPath) : 'Tidak ada foto',
                 'status' => 'Baru',
                 'status_class' => 'new',
             ],
         ], 201);
+    }
+
+    public function photo(Request $request, $id)
+    {
+        $report = DamageReport::findOrFail($id);
+        $user = $request->user();
+
+        if ((int) $report->user_id !== (int) $user->id && !$user->isPetugas()) {
+            return response()->json(['message' => 'Anda tidak memiliki izin untuk mengakses foto ini.'], 403);
+        }
+
+        if (!$report->photo) {
+            return response()->json(['message' => 'Laporan ini tidak memiliki foto.'], 404);
+        }
+
+        $disk = Storage::disk('local')->exists($report->photo) ? 'local' : 'public';
+        abort_unless(Storage::disk($disk)->exists($report->photo), 404);
+
+        return Storage::disk($disk)->download($report->photo, basename($report->photo));
     }
 
     /**
@@ -176,12 +205,13 @@ class DamageReportController extends Controller
                 'location' => $rep->location_detail,
                 'description' => $rep->description,
                 'photo' => $rep->photo ? basename($rep->photo) : 'Tidak ada foto',
-                'photo_url' => $rep->photo ? Storage::url($rep->photo) : null,
+                'photo_url' => $rep->photo ? "/api/reports/{$rep->id}/photo" : null,
                 'status' => $statusText,
                 'status_class' => $rep->status,
                 'resolution' => $rep->resolution_note ?? '',
                 'rejectReason' => $rep->reject_reason ?? '',
                 'date' => $rep->created_at ? $rep->created_at->translatedFormat('d M Y') : '-',
+                'submitted' => $rep->created_at ? $rep->created_at->translatedFormat('d F Y, H:i') . ' WIB' : '-',
             ];
         });
 

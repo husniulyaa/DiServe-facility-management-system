@@ -27,6 +27,7 @@ const successFacility = document.querySelector("#success-report-facility");
 const successCategory = document.querySelector("#success-report-category");
 const successLocation = document.querySelector("#success-report-location");
 const successDate = document.querySelector("#success-report-date");
+const successSubmitted = document.querySelector("#success-report-submitted");
 const successDescription = document.querySelector("#success-report-description");
 const successPhoto = document.querySelector("#success-report-photo");
 
@@ -96,6 +97,7 @@ function showSuccessOverlay(report) {
     successCategory.textContent = report.category;
     successLocation.textContent = report.location;
     successDate.textContent = report.date;
+    if (successSubmitted) successSubmitted.textContent = report.submitted;
     successDescription.textContent = report.description;
     successPhoto.textContent = report.photo;
 
@@ -112,6 +114,11 @@ function closeSuccessOverlay() {
 reportForm.addEventListener("submit", async function (event) {
     event.preventDefault();
 
+    if (!window.DiServeBusinessRules.isSubmissionWindowOpen()) {
+        alert("Pengajuan laporan hanya dapat dikirim pukul 07.00–20.00 WIB.");
+        return;
+    }
+
     const facility = facilityInput.options[facilityInput.selectedIndex].text;
     const facilityVal = facilityInput.value;
     const category = categoryInput.options[categoryInput.selectedIndex].text;
@@ -125,9 +132,11 @@ reportForm.addEventListener("submit", async function (event) {
     }
 
     const submitBtn = reportForm.querySelector("button[type='submit']");
-    if (submitBtn) {
+    if (submitBtn && !submitBtn.disabled) {
         submitBtn.disabled = true;
         submitBtn.textContent = "Mengirim...";
+    } else if (submitBtn) {
+        return;
     }
 
     try {
@@ -161,7 +170,8 @@ reportForm.addEventListener("submit", async function (event) {
             facility: facility,
             category: category,
             location: location,
-            date: formatDate(new Date()),
+            date: data.report.date || formatDate(new Date()),
+            submitted: data.report.submitted || "-",
             status: "Baru",
             statusClass: "new",
             description: description,
@@ -198,25 +208,30 @@ document.addEventListener("keydown", function (event) {
 
 async function loadFacilityOptions() {
     if (!facilityInput) return;
+    const placeholder = new Option("Memuat fasilitas...", "");
+    placeholder.disabled = true;
+    facilityInput.replaceChildren(placeholder);
     try {
         const res = await fetch(`${API_BASE}/api/facilities`);
-        if (res.ok) {
-            const data = await res.json();
-            const facilities = data.data || [];
-            if (facilities.length > 0) {
-                const currentVal = facilityInput.value;
-                facilityInput.innerHTML = '<option value="">Pilih fasilitas yang bermasalah</option>';
-                facilities.forEach(f => {
-                    const opt = document.createElement("option");
-                    opt.value = f.slug || f.id;
-                    opt.textContent = f.name;
-                    facilityInput.appendChild(opt);
-                });
-                if (currentVal) facilityInput.value = currentVal;
-            }
+        if (!res.ok) throw new Error(`Facility request failed (${res.status})`);
+
+        const data = await res.json();
+        const facilities = data.data || [];
+        facilityInput.replaceChildren(new Option(
+            facilities.length ? "Pilih fasilitas yang bermasalah" : "Belum ada fasilitas tersedia",
+            ""
+        ));
+        facilities.forEach(f => {
+            facilityInput.appendChild(new Option(f.name, String(f.id)));
+        });
+        if (facilities.length === 0) {
+            facilityInput.options[0].disabled = true;
         }
-    } catch (e) {
-        console.error("Load facility options error:", e);
+    } catch (error) {
+        console.error("Load facility options error:", error);
+        const failedOption = new Option("Gagal memuat fasilitas. Muat ulang halaman.", "");
+        failedOption.disabled = true;
+        facilityInput.replaceChildren(failedOption);
     }
 }
 
