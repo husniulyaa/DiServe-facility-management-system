@@ -269,7 +269,7 @@ class AuditRegressionTest extends TestCase
         $unknown->assertStatus(503);
     }
 
-    public function test_private_reservation_attachment_is_owner_or_staff_only(): void
+    public function test_private_reservation_attachment_is_owner_or_staff_only_and_missing_files_are_reported(): void
     {
         Storage::fake('local');
         Storage::disk('local')->put('reservations/private.pdf', 'private reservation document');
@@ -301,6 +301,34 @@ class AuditRegressionTest extends TestCase
         $this->actingAs($owner, 'sanctum')
             ->get("/api/reservations/{$reservation->id}/supporting-file")
             ->assertDownload('private.pdf');
+
+        $staff = User::create([
+            'name' => 'Reservation Staff',
+            'identity_number' => '240601000003',
+            'email' => 'reservation.staff@facility.undip.ac.id',
+            'password' => 'Password123!',
+            'role' => 'petugas',
+            'status' => 'aktif',
+        ]);
+        $this->actingAs($staff, 'sanctum')
+            ->get("/api/reservations/{$reservation->id}/supporting-file")
+            ->assertDownload('private.pdf');
+
+        $missingReservation = Reservation::create([
+            'user_id' => $owner->id,
+            'facility_id' => $facility->id,
+            'start_date' => '2026-10-10',
+            'end_date' => '2026-10-10',
+            'start_time' => '11:00',
+            'end_time' => '11:30',
+            'purpose' => 'Berkas yang tidak tersedia.',
+            'supporting_file' => 'reservations/missing.pdf',
+            'status' => 'pending',
+        ]);
+        $this->actingAs($owner, 'sanctum')
+            ->getJson("/api/reservations/{$missingReservation->id}/supporting-file")
+            ->assertNotFound()
+            ->assertJsonPath('message', 'Berkas pendukung tidak ditemukan pada penyimpanan.');
     }
 
     public function test_private_report_photo_is_owner_or_staff_only(): void

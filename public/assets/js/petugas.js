@@ -196,7 +196,7 @@ function openReservationDetail(rowId, status, reasonText = "") {
     document.getElementById('detail-purpose').textContent = data.purpose;
     document.getElementById('detail-filename').textContent = data.filename;
     const fileLink = document.getElementById('detail-file-link');
-    if (fileLink) { fileLink.href = data.file_url ? `${API_BASE}${data.file_url}` : "#"; fileLink.classList.toggle('hidden', !data.file_url); }
+    if (fileLink) { fileLink.href = data.file_url ? window.resolveApiUrl(data.file_url) : "#"; fileLink.classList.toggle('hidden', !data.file_url); }
 
     const reasonBox = document.getElementById('detail-reason-box');
     const reasonMsg = document.getElementById('detail-reason-text');

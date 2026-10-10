@@ -82,7 +82,7 @@ function openReservationDetail(button) {
     detailStatus.textContent = status;
     detailFile.textContent = file;
     if (detailFileDownload) {
-        detailFileDownload.href = fileUrl ? `${API_BASE}${fileUrl}` : "#";
+        detailFileDownload.href = fileUrl ? window.resolveApiUrl(fileUrl) : "#";
         detailFileDownload.classList.toggle("hidden", !fileUrl);
     }
     detailSubmitted.textContent = submitted;

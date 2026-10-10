@@ -27,6 +27,16 @@ window.escapeHTML = function (value) {
   })[character]);
 };
 
+window.resolveApiUrl = function (url) {
+  if (!url) return "";
+  const apiOrigin =
+    window.location.protocol === "file:" ||
+    (window.location.port && window.location.port !== "8000")
+      ? "http://127.0.0.1:8000"
+      : window.location.origin;
+  return new URL(url, apiOrigin).href;
+};
+
 window.downloadProtectedFile = async function (url, filename) {
   if (!url) throw new Error("Berkas tidak tersedia.");
   const token = localStorage.getItem("auth_token");

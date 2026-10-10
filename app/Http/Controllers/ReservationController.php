@@ -247,7 +247,11 @@ class ReservationController extends Controller
         }
 
         $disk = Storage::disk('local')->exists($reservation->supporting_file) ? 'local' : 'public';
-        abort_unless(Storage::disk($disk)->exists($reservation->supporting_file), 404);
+        if (!Storage::disk($disk)->exists($reservation->supporting_file)) {
+            return response()->json([
+                'message' => 'Berkas pendukung tidak ditemukan pada penyimpanan.',
+            ], 404);
+        }
 
         return Storage::disk($disk)->download($reservation->supporting_file, basename($reservation->supporting_file));
     }

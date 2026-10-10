@@ -79,6 +79,32 @@ class PenggunaTest extends TestCase
         ]);
     }
 
+    public function test_reservation_upload_is_saved_and_downloadable_by_its_owner(): void
+    {
+        Storage::fake('local');
+        $targetDate = now()->addDays(5)->format('Y-m-d');
+
+        $response = $this->actingAs($this->userA, 'sanctum')
+            ->post('/api/reservations', [
+                'facility' => $this->facility->id,
+                'start_date' => $targetDate,
+                'end_date' => $targetDate,
+                'start_time' => '08:00',
+                'end_time' => '09:00',
+                'purpose' => 'Dokumen reservasi untuk pengujian.',
+                'supporting_file' => UploadedFile::fake()->create('supporting.pdf', 128, 'application/pdf'),
+            ]);
+
+        $response->assertCreated();
+        $reservation = Reservation::query()->where('user_id', $this->userA->id)->firstOrFail();
+        $this->assertStringStartsWith('reservations/', $reservation->supporting_file);
+        Storage::disk('local')->assertExists($reservation->supporting_file);
+
+        $this->actingAs($this->userA, 'sanctum')
+            ->get("/api/reservations/{$reservation->id}/supporting-file")
+            ->assertDownload(basename($reservation->supporting_file));
+    }
+
     public function test_us3_conflict_check_rejects_overlapping_reservation_if_already_approved(): void
     {
         $targetDate = now()->addDays(5)->format('Y-m-d');
