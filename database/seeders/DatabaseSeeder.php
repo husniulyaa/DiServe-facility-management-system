@@ -96,7 +96,7 @@ class DatabaseSeeder extends Seeder
         }
 
         // 2. Seed Users (Extracted from GitHub database-setup seed.go)
-        // Password supports both password123 (seed.go) and Password123!
+        // Demo accounts use one password; do not use this seeder to provision production accounts.
         $defaultPassword = Hash::make('Password123!');
 
         // Admin: Ira Kusumadewi
